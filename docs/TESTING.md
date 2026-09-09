@@ -7,7 +7,11 @@
 - All 22 deterministic synchronization tests pass. Cases cover initial alignment, coalescing and held keys, external changes, mute preservation, stale operations, delayed confirmation, write failures, quantization, cancellation, and output switching.
 - Self-contained Windows x64 application and worker publication.
 
-These checks do not execute Windows COM, DDC, WPF, MSI installation, or the Dell hardware. WiX was attempted locally: it explicitly reports Windows-only support and rejects ordinary directory names on macOS, so the MSI build is blocked here. The Windows workflow is supplied but has not been run. ARM64 remains untested.
+These local checks do not execute Windows COM, DDC, WPF, MSI installation, or the Dell hardware. WiX explicitly reports Windows-only support, so the final MSI build runs in [Windows CI](https://github.com/nkatchik/win-monitor-sync/actions/workflows/build.yml). CI builds the application, runs the 22 sync tests, builds and validates the MSI, and uploads the packages. Refer to each run for its actual result. Installation, real monitor behavior, and ARM64 remain untested.
+
+Both workflows pass actionlint validation. A local build using `-p:Version=1.2.3` was also inspected: both app and worker assemblies report `1.2.3`. The manual publication workflow is available with a required version input; creating a release is separate from verifying an automatic build.
+
+The [first Windows CI run](https://github.com/nkatchik/win-monitor-sync/actions/runs/34363624736) passed on 9 September 2026: build, tests, MSI packaging, and artifact upload. This verifies package creation, not installation or live DDC behavior.
 
 ## Dell S2725QS acceptance
 

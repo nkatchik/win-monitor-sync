@@ -1,6 +1,6 @@
 # Monitor Sync for Windows 11
 
-Design and implementation status, 9 September 2026. Native Windows sliders remain a requirement. The selected first step is simple equal-percentage volume synchronization. A WPF app, isolated DDC worker, deterministic sync tests, and per-user MSI authoring are implemented. The Windows x64 build has been cross-compiled; Windows execution, Dell testing, final MSI validation, signing, and native brightness integration remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 9 September 2026. Native Windows sliders remain a requirement. The selected first step is simple equal-percentage volume synchronization. A WPF app, isolated DDC worker, deterministic sync tests, and per-user MSI authoring are implemented. The Windows x64 build has been cross-compiled, and GitHub Actions now provides automatic Windows build/test/package validation plus manual versioned releases. Windows app execution, MSI installation, Dell testing, signing, and native brightness integration remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
 No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Native Windows sliders remain the desired interface; hardware-only volume and native external brightness must not be promised where those APIs cannot provide them.
 
