@@ -1,0 +1,110 @@
+# Monitor Sync
+
+A Windows 11 preview that mirrors the native Windows volume percentage to a monitor's speakers, and reflects monitor-button volume changes back into Windows. It uses existing Windows APIs and DDC/CI; there is no custom driver, audio routing, or administrator service.
+
+The first target is the Dell S2725QS over HDMI, followed by DisplayPort. **Neither connection has been tested on hardware yet.**
+
+## Preview behavior
+
+- Windows Quick Settings, volume keys, and other endpoint-volume controls drive monitor volume.
+- Monitor-button changes are checked every five seconds and update Windows without a feedback loop.
+- Enabling or resuming sync aligns both controls to the lower current percentage. Saved volume levels are never restored.
+- Rapid input is coalesced, writes are read back, and failed or unconfirmed operations pause sync.
+- Only the explicitly paired default playback output is managed. Switching to headphones suspends sync; returning to the paired output attempts to resume it.
+- Windows mute and individual application volumes are preserved. Monitor hardware mute is not synchronized.
+- A tray menu provides Open, Pause, and Exit. Starting with Windows is optional.
+- The settings window also has direct hardware brightness control. **Native Windows brightness integration remains unimplemented.**
+
+This is simple percentage synchronization. Windows and monitor attenuation both remain active, so matching 50% settings can sound quieter than ordinary Windows 50%. It does not keep the Windows audio gain at 100%. The actual response depends on both devices' volume curves; see [the design](DESIGN.md).
+
+## First run on Windows
+
+1. Enable **DDC/CI** in the Dell's on-screen menu. Start with a direct HDMI connection and select the Dell speakers as the default Windows playback output.
+2. Set both volumes to comfortable levels. Extract the complete preview ZIP into a folder and run `MonitorSync.exe`; keep the worker and runtime files together.
+3. Select the Dell in Monitor Sync and check the displayed playback output. Click **Enable / resume sync** to confirm that pairing.
+4. Try Windows Quick Settings and volume keys, then the Dell's volume buttons. Allow up to five seconds for monitor-button changes to appear in Windows.
+
+Closing the settings window leaves the tray app running. Use **Exit** to stop it. A previously enabled pairing can resume at the next launch. **Pause** disables that saved preference. The app leaves current volumes in place on exit.
+
+If DDC fails, the status explains the failure and ordinary Windows volume remains usable. Use **Refresh devices**, verify the pairing, and enable sync again. A port change can create a new Windows audio endpoint and require a new pairing. Clone mode and ambiguous physical display mappings are not supported in this preview.
+
+The generated preview is unsigned. A trusted public MSI has not been produced. Signing and real Windows installation tests are required before consumer distribution; a fresh signature alone cannot guarantee SmartScreen reputation. [Microsoft's guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
+
+## Build and package
+
+Use the SDK pinned in `global.json` (.NET 10.0.401). The app bundles its runtime, so end users do not need to install .NET.
+
+On Windows, with PowerShell 7 and the SDK installed:
+
+```powershell
+./scripts/build.ps1
+```
+
+The script builds the solution, runs the sync tests, publishes the app and worker, then builds an unsigned per-user MSI and ZIP under `artifacts/releases`. It installs under `%LOCALAPPDATA%\Programs\MonitorSync`, creates a Start-menu shortcut, and removes the startup entry during uninstall. The settings and diagnostic logs are retained in `%LOCALAPPDATA%\MonitorSync`.
+
+`-Runtime win-arm64` selects an ARM64 package. Only the x64 publication has been verified so far. Use a higher three-part `-Version` for upgrades. Cross-architecture upgrades are not validated.
+
+To require a signed release, supply a code-signing certificate available to SignTool in the current user's certificate store and install the Windows SDK:
+
+```powershell
+./scripts/build.ps1 -Version 0.1.0 -Publisher 'Your publisher name' `
+    -CertificateThumbprint 'YOUR_CERTIFICATE_THUMBPRINT' -RequireSigned
+```
+
+The script preserves valid dependency signatures, signs unsigned EXE/DLL payloads, timestamps signatures, signs the MSI, and verifies the result. Cloud signing providers need a corresponding signing adapter. A signing identity and Store distribution have not been configured.
+
+Installer authoring uses WiX 6.0.2 and generated components with stable identifiers and per-user registry key paths. WiX's [maintenance fee terms](https://docs.firegiant.com/wix/osmf/) apply to qualifying use. Windows is required for the final MSI build and validation.
+
+## GitHub Actions
+
+The project is hosted at [nkatchik/win-monitor-sync](https://github.com/nkatchik/win-monitor-sync) with two workflows:
+
+| Workflow | Trigger | Result |
+| --- | --- | --- |
+| [Build and test](https://github.com/nkatchik/win-monitor-sync/actions/workflows/build.yml) | Every push and pull request | Builds on Windows, runs all sync tests, builds the MSI and ZIP, and retains downloadable artifacts for 14 days |
+| [Publish release](https://github.com/nkatchik/win-monitor-sync/actions/workflows/release.yml) | Manual, with a required `version` | Builds and tests the selected commit, packages that version, and publishes a GitHub release tagged `v<version>` with MSI, ZIP, and SHA-256 checksum files |
+
+To publish, open **Actions → Publish release → Run workflow**, select `main` (or the branch to release), and enter a version such as `0.1.0`. The version must be three integers without a `v` prefix or prerelease suffix. MSI limits the first two numbers to 255 and the third to 65535. Existing tags are rejected; published packages are not overwritten.
+
+The equivalent command is:
+
+```sh
+gh workflow run release.yml --repo nkatchik/win-monitor-sync --ref main -f version=0.1.0
+```
+
+The supplied workflows produce **unsigned** packages. They require no signing secrets. The manual workflow verifies checksums and attaches all packages to a draft before publishing it. If publication fails after creating the draft, review that draft before retrying the same version. Only the publication job receives permission to create releases.
+
+The version input is applied to the MSI, filenames, application assemblies, settings-window version, and diagnostics. Build and release workflows do not establish live monitor compatibility or installation behavior on a real PC.
+
+## Tests and diagnostics
+
+The synchronization state machine and installer-source generator can build on macOS/Linux with Windows targeting enabled:
+
+```sh
+dotnet restore MonitorSync.slnx
+dotnet build MonitorSync.slnx -c Release --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
+dotnet tests/MonitorSync.Tests/bin/Release/net10.0/MonitorSync.Tests.dll
+```
+
+Use **Save diagnostics** in the app, or run this on Windows for a read-only JSON report:
+
+```powershell
+Start-Process ./MonitorSync.exe -ArgumentList '--diagnostics', 'report.json' -Wait
+```
+
+Reports include the Windows version, architecture, current audio endpoint and hardware-support flags, monitor device paths, and DDC feature ranges/errors. Device identifiers can identify the connected equipment. No report is uploaded automatically. Current runtime errors are logged to `%LOCALAPPDATA%\MonitorSync\app.log`.
+
+Build and unit-test results do not establish real monitor support. See [Windows acceptance checks](docs/TESTING.md) for the remaining validation.
+
+## Source layout
+
+| Project | Purpose |
+| --- | --- |
+| `MonitorSync.Core` | Transport-independent synchronization and conflict handling |
+| `MonitorSync.Windows` | Core Audio COM and monitor DDC interop |
+| `MonitorSync.Worker` | Isolated, serialized DDC calls with parent-exit cleanup |
+| `MonitorSync.App` | WPF setup window, tray, lifecycle, worker deadlines, settings |
+| `MonitorSync.Tests` | Deterministic tests with fake audio and monitor transports |
+| `MonitorSync.Packaging` | WiX payload authoring for per-user installation |
+
+The worker has a three-second deadline for individual operations and twenty seconds for enumeration. A timeout terminates the helper and pauses the affected operation; Windows audio is never passed through the app. This contains a hung user-mode call, but cannot protect Windows from a fault in an existing graphics driver.

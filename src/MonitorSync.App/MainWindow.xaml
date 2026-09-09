@@ -1,0 +1,49 @@
+<Window x:Class="MonitorSync.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Monitor Sync" Width="600" Height="710" MinWidth="480" MinHeight="540"
+        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
+        FontFamily="Segoe UI" FontSize="14" WindowStartupLocation="CenterScreen">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="28">
+      <TextBlock Text="Monitor Sync" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="Use Windows volume to control your monitor speakers." Margin="0,6,0,22" />
+      <TextBlock Text="Playback device" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding AudioName}" Margin="0,6,0,16" AutomationProperties.LiveSetting="Polite" />
+      <Label Content="_Monitor" Target="{Binding ElementName=MonitorList}" FontWeight="SemiBold" Padding="0,0,0,6" />
+      <ComboBox x:Name="MonitorList" ItemsSource="{Binding Monitors}" SelectedItem="{Binding SelectedMonitor}"
+                DisplayMemberPath="Name" MinHeight="34" IsEnabled="{Binding CanSelect}" AutomationProperties.Name="Monitor to pair" />
+      <TextBlock Text="{Binding MonitorDetails}" Margin="0,6,0,16" FontSize="12" />
+      <WrapPanel Margin="0,0,0,12">
+        <Button Content="Enable / resume sync" Click="EnableClick" IsEnabled="{Binding CanEnable}" />
+        <Button Content="Pause" Click="PauseClick" />
+        <Button Content="Refresh" Click="RefreshClick" IsEnabled="{Binding CanInteract}" />
+      </WrapPanel>
+      <TextBlock Text="Enabling starts both controls at the lower current volume. Mute and individual app volumes stay under Windows control."
+                 FontSize="12" Margin="0,0,0,16" />
+      <Border BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" BorderThickness="1" Padding="14" CornerRadius="6">
+        <StackPanel>
+          <TextBlock Text="{Binding Status}" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
+          <TextBlock Text="{Binding Levels}" Margin="0,6,0,0" />
+        </StackPanel>
+      </Border>
+      <TextBlock Text="Monitor brightness" FontSize="18" FontWeight="SemiBold" Margin="0,24,0,6" />
+      <TextBlock Text="This slider adjusts the monitor directly. Native Windows brightness integration is not included in this version."
+                 FontSize="12" Margin="0,0,0,10" />
+      <DockPanel>
+        <Button Content="Apply" DockPanel.Dock="Right" Click="BrightnessClick" IsEnabled="{Binding CanAdjustBrightness}" Margin="12,0,0,0" />
+        <TextBlock Text="{Binding Brightness, StringFormat={}{0:0}%}" DockPanel.Dock="Right" Width="44" VerticalAlignment="Center" />
+        <Slider Minimum="0" Maximum="100" Value="{Binding Brightness}" TickFrequency="1" IsSnapToTickEnabled="True"
+                VerticalAlignment="Center" IsEnabled="{Binding CanAdjustBrightness}" AutomationProperties.Name="Monitor hardware brightness" />
+      </DockPanel>
+      <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" Margin="0,24,0,18" />
+      <WrapPanel>
+        <Button Content="Save diagnostics…" Click="DiagnosticsClick" IsEnabled="{Binding CanInteract}" />
+        <Button Content="Exit" Click="ExitClick" />
+      </WrapPanel>
+      <TextBlock Text="{Binding VersionText}"
+                 FontSize="12" Margin="0,14,0,0" />
+    </StackPanel>
+  </ScrollViewer>
+</Window>

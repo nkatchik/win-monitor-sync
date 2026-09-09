@@ -1,0 +1,2 @@
+# Preserve notices exactly as shipped by the runtime packages.
+licenses/dotnet-* -text -whitespace

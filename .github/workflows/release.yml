@@ -1,0 +1,90 @@
+name: Publish release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 0.1.0 (without v)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+env:
+  RELEASE_VERSION: ${{ inputs.version }}
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  build:
+    name: Build and test release packages
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate version and reject existing tags
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/check-version.ps1 -Version $env:RELEASE_VERSION
+          $tag = "v$env:RELEASE_VERSION"
+          $refs = gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$tag"
+          if ($LASTEXITCODE) { throw 'Could not check existing release tags.' }
+          if (($refs | ConvertFrom-Json) | Where-Object ref -EQ "refs/tags/$tag") {
+              throw "Tag $tag already exists. Choose a new version."
+          }
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Build, run tests, and package requested version
+        shell: pwsh
+        run: ./scripts/build.ps1 -Version $env:RELEASE_VERSION
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-packages
+          path: |
+            artifacts/releases/*.msi
+            artifacts/releases/*.zip
+            artifacts/releases/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-packages
+          path: release
+      - name: Verify packages and publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          name="MonitorSync-${RELEASE_VERSION}-win-x64-unsigned"
+          assets=("release/$name.msi" "release/$name.msi.sha256" "release/$name.zip" "release/$name.zip.sha256")
+          for asset in "${assets[@]}"; do test -s "$asset"; done
+          (cd release && sha256sum --check "$name.msi.sha256" "$name.zip.sha256")
+          cat > release-notes.md <<'NOTES'
+          Windows 11 x64 packages: MSI installer and portable ZIP, with SHA-256 checksums.
+
+          These packages are unsigned. Native Windows volume synchronization is implemented; native Windows brightness integration remains unfinished. Monitor compatibility still requires hardware testing.
+          NOTES
+          tag="v${RELEASE_VERSION}"
+          gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" \
+            --title "Monitor Sync $RELEASE_VERSION" --notes-file release-notes.md --generate-notes --draft
+          gh release edit "$tag" --draft=false
+          printf 'Published [Monitor Sync %s](https://github.com/%s/releases/tag/%s)\n' \
+            "$RELEASE_VERSION" "$GITHUB_REPOSITORY" "$tag" >> "$GITHUB_STEP_SUMMARY"

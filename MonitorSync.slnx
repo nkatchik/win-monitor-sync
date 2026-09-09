@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/MonitorSync.Core/MonitorSync.Core.csproj" />
+  <Project Path="src/MonitorSync.Windows/MonitorSync.Windows.csproj" />
+  <Project Path="src/MonitorSync.Worker/MonitorSync.Worker.csproj" />
+  <Project Path="src/MonitorSync.App/MonitorSync.App.csproj" />
+  <Project Path="tests/MonitorSync.Tests/MonitorSync.Tests.csproj" />
+  <Project Path="installer/MonitorSync.Packaging/MonitorSync.Packaging.csproj" />
+</Solution>
