@@ -65,12 +65,16 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Brightness in SDR | Use the hardware probe to confirm backlight behavior; there is no app slider |
 | Brightness in HDR | Record limitations; do not treat Windows SDR-content brightness as physical backlight control |
 | Multi-display / clone | Duplicate model names and ambiguous physical mappings leave sync waiting |
+| Audio output on display A, cursor on display B | Volume sync controls only A; cursor position does not redirect audio |
+| Selected audio monitor unavailable while another supports DDC | Neither that other monitor nor the Windows endpoint is changed by sync |
 | Worker/app termination | No audio interruption or forced volume reset; helper exits with its owner |
 | High DPI, keyboard, screen reader | Tray status, startup checkbox, and Exit are usable; no app window opens |
 
 A successful DDC write reply is not sufficient: check the monitor's displayed value and audible/visible behavior. Measure the useful quiet-to-loud range before deciding whether a different mapping is needed. Exclusive-mode playback can have a different gain response from shared-mode playback.
 
 Native Windows brightness support remains a separate unresolved requirement. Passing a hardware brightness probe does not satisfy it.
+
+When native brightness integration is implemented, verify that an adjustment targets only the screen under the cursor, even when audio plays through another monitor. Moving the cursor alone must not change brightness. An unsupported or ambiguous cursor target must produce no sync writes to any screen. Crossing to another screen or changing display topology during a pending adjustment must discard stale commands and readback. These are pending acceptance requirements, not passed tests.
 
 ## Windows installer and distribution
 

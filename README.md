@@ -10,10 +10,12 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial
 - Monitor-button changes are checked every five seconds and update Windows without a feedback loop.
 - Sync starts automatically and aligns both controls to the lower current percentage. Saved volume levels are never restored.
 - Rapid input is coalesced and writes are read back. Failed or unconfirmed operations stop the current connection and retry automatically after ten seconds.
-- The current HDMI/DisplayPort audio output is matched to a monitor automatically. Switching to headphones suspends monitor control; returning to monitor speakers resumes it.
+- Volume follows the currently selected Windows playback output when it is a supported monitor. Switching to headphones suspends monitor control; returning to monitor speakers resumes it. Cursor position does not select the audio target.
 - Windows mute and individual application volumes are preserved. Monitor hardware mute is not synchronized.
 - The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows sync status and an **Exit** action.
 - There is no settings window, pairing step, pause switch, or custom slider. **Native Windows brightness integration remains unimplemented.**
+
+The intended brightness target is the screen under the mouse cursor, independently of audio output. If the correct monitor cannot be identified or controlled, sync must do nothing; it must not fall back to another screen. This brightness behavior is a requirement for future implementation.
 
 This is simple percentage synchronization. Windows and monitor attenuation both remain active, so matching 50% settings can sound quieter than ordinary Windows 50%. It does not keep the Windows audio gain at 100%. The actual response depends on both devices' volume curves; see [the design](DESIGN.md).
 
