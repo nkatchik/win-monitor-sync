@@ -3,7 +3,7 @@ namespace MonitorSync.Core;
 /// <summary>
 /// Single-consumer state machine. Audio may change during any awaited monitor operation.
 /// DDC commands never run in an audio callback. The host cancels/discards an instance
-/// on pause or topology changes rather than reusing state for a different connection.
+/// on shutdown or topology changes rather than reusing state for a different connection.
 /// </summary>
 public sealed class VolumeSynchronizer(IAudioVolume audio, IMonitorVolume monitor,
     Func<long> milliseconds, SyncOptions? options = null)
@@ -80,7 +80,7 @@ public sealed class VolumeSynchronizer(IAudioVolume audio, IMonitorVolume monito
             {
                 if (++_confirmationReads >= _options.ConfirmationAttempts)
                     throw new IOException($"Monitor did not confirm volume {expected}/{reading.Maximum}; " +
-                        $"it still reports {reading.Current}/{reading.Maximum}. Sync is paused.");
+                        $"it still reports {reading.Current}/{reading.Maximum}.");
                 _confirmDue = milliseconds() + _options.SettleMs;
                 return;
             }
@@ -116,7 +116,7 @@ public sealed class VolumeSynchronizer(IAudioVolume audio, IMonitorVolume monito
     private void Observe(AudioSnapshot snapshot, long now)
     {
         if (snapshot.EndpointId != _lastAudio.EndpointId)
-            throw new IOException("The playback device changed. Reconnect the saved pairing to resume.");
+            throw new IOException("The playback device changed. A new connection is required.");
         if (snapshot.Percent != _lastAudio.Percent)
             Queue(snapshot.Percent, now + _options.CoalesceMs);
         _lastAudio = snapshot;
@@ -135,7 +135,7 @@ public sealed class VolumeSynchronizer(IAudioVolume audio, IMonitorVolume monito
     {
         reading.Validate();
         if (reading.Maximum != _lastMonitor.Maximum)
-            throw new IOException("The monitor's volume range changed. Refresh the display pairing.");
+            throw new IOException("The monitor's volume range changed. A new connection is required.");
     }
 
     private static bool SameIntent(AudioSnapshot a, AudioSnapshot b) =>

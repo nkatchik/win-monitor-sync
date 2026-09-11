@@ -8,6 +8,12 @@ if ($env:OS -ne 'Windows_NT') { throw 'The app and hardware diagnostics require 
 
 $repository = Split-Path $PSScriptRoot -Parent
 $dotnet = Join-Path $repository '.tools/dotnet/dotnet.exe'
+$hostOptions = @()
+if (Test-Path -LiteralPath $dotnet) {
+    # Runtime search options apply to published app hosts. The debug publication
+    # is three directories below the repository, in artifacts/debug/app.
+    $hostOptions = @('-property:AppHostRelativeDotNet=../../../.tools/dotnet')
+}
 if (-not (Test-Path -LiteralPath $dotnet)) {
     $command = Get-Command dotnet -ErrorAction SilentlyContinue
     if (-not $command) { throw 'Install the SDK pinned in global.json, or extract it into .tools/dotnet.' }
@@ -39,7 +45,15 @@ try {
     & $dotnet tests/MonitorSync.Tests/bin/Debug/net10.0/MonitorSync.Tests.dll
     if ($LASTEXITCODE) { throw 'Synchronization tests failed.' }
 
-    $app = Join-Path $repository 'src/MonitorSync.App/bin/Debug/net10.0-windows/MonitorSync.exe'
+    $publish = Join-Path $repository 'artifacts/debug/app'
+    # Pass app-host properties directly to MSBuild's publication target.
+    & $dotnet msbuild src/MonitorSync.App/MonitorSync.App.csproj -target:Publish -property:Configuration=Debug `
+        -property:NoBuild=true "-property:PublishDir=$publish/" @hostOptions -verbosity:minimal
+    if ($LASTEXITCODE) { throw 'Debug application publication failed.' }
+    & $dotnet msbuild src/MonitorSync.Worker/MonitorSync.Worker.csproj -target:Publish -property:Configuration=Debug `
+        -property:NoBuild=true "-property:PublishDir=$publish/" @hostOptions -verbosity:minimal
+    if ($LASTEXITCODE) { throw 'Debug worker publication failed.' }
+    $app = Join-Path $publish 'MonitorSync.exe'
     if ($DiagnosticsOnly) {
         $reportDirectory = Join-Path $repository 'artifacts/debug'
         New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
@@ -58,8 +72,8 @@ try {
         Write-Output "Read-only diagnostic report: $report"
     }
     else {
-        Start-Process -FilePath $app
-        Write-Output 'Monitor Sync launched. Use Exit in the app or tray menu to stop it.'
+        Start-Process -FilePath $app -WindowStyle Hidden
+        Write-Output 'Monitor Sync is running in the tray. Use its Exit menu item to stop it.'
     }
 }
 finally {

@@ -1,30 +1,20 @@
 using System.IO;
-using System.Text.Json;
 using Microsoft.Win32;
 
 namespace MonitorSync.App;
-
-public sealed record UserSettings(string? MonitorId = null, string? EndpointId = null, bool SyncEnabled = false);
 
 public static class SettingsStore
 {
     public static readonly string DirectoryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSync");
     private static readonly object LogGate = new();
-    private static string SettingsPath => Path.Combine(DirectoryPath, "settings.json");
-    public static UserSettings Load()
+    public static void InitializeStartup()
     {
-        try { return File.Exists(SettingsPath) ? JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(SettingsPath)) ?? new() : new(); }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
-        { Log("Settings could not be read: " + e.Message); return new(); }
-    }
-
-    public static void Save(UserSettings settings)
-    {
-        Directory.CreateDirectory(DirectoryPath);
-        var temporary = SettingsPath + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temporary, SettingsPath, overwrite: true);
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+        // Missing means first run. An empty value preserves an explicit opt-out.
+        // Refresh enabled entries if the executable moved or was upgraded.
+        if (key?.GetValue("MonitorSync") is not string value || !string.IsNullOrWhiteSpace(value))
+            StartsWithWindows = true;
     }
 
     public static bool StartsWithWindows

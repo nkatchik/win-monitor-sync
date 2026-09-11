@@ -2,6 +2,58 @@ using MonitorSync.Core;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Automatically matches display audio to its monitor model", () =>
+    {
+        var monitor = new MonitorDescriptor("dell", "Dell S2725QS(HDMI1)", new(45, 100), null, null);
+        Equal(monitor, AutomaticMonitorSelection.Find("2- DELL S2725QS", true, [monitor]));
+        return Task.CompletedTask;
+    }),
+    ("Headphones cannot be selected even with a matching display name", () =>
+    {
+        var monitor = new MonitorDescriptor("dell", "Dell S2725QS", new(45, 100), null, null);
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("DELL S2725QS", false, [monitor]));
+        return Task.CompletedTask;
+    }),
+    ("A different display audio output does not control the Dell", () =>
+    {
+        var monitor = new MonitorDescriptor("dell", "Dell S2725QS(HDMI1)", new(45, 100), null, null);
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("DELL S2725Q", true, [monitor]));
+        return Task.CompletedTask;
+    }),
+    ("Duplicate monitor models prevent automatic selection", () =>
+    {
+        var first = new MonitorDescriptor("first", "Dell S2725QS(HDMI1)", new(45, 100), null, null);
+        var second = first with { Id = "second", Name = "DELL S2725QS(DisplayPort)" };
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("DELL S2725QS", true, [first, second]));
+        return Task.CompletedTask;
+    }),
+    ("An unreadable duplicate does not make a pairing unambiguous", () =>
+    {
+        var first = new MonitorDescriptor("first", "Dell S2725QS(HDMI1)", new(45, 100), null, null);
+        var second = first with { Id = "second", Volume = null };
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("DELL S2725QS", true, [first, second]));
+        return Task.CompletedTask;
+    }),
+    ("A monitor without volume support cannot be selected", () =>
+    {
+        var monitor = new MonitorDescriptor("dell", "Dell S2725QS", null, new(100, 100), "DDC unavailable");
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("DELL S2725QS", true, [monitor]));
+        return Task.CompletedTask;
+    }),
+    ("Missing endpoint descriptions do not guess a monitor", () =>
+    {
+        var monitor = new MonitorDescriptor("dell", "Dell S2725QS", new(45, 100), null, null);
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find(null, true, [monitor]));
+        Equal<MonitorDescriptor?>(null, AutomaticMonitorSelection.Find("", true, [monitor]));
+        return Task.CompletedTask;
+    }),
+    ("Distinct monitor models select only the matching display", () =>
+    {
+        var dell = new MonitorDescriptor("dell", "Dell S2725QS(DP)", new(45, 100), null, null);
+        var other = new MonitorDescriptor("other", "LG 27UP850", new(30, 100), null, null);
+        Equal(dell, AutomaticMonitorSelection.Find("DELL S2725QS", true, [other, dell]));
+        return Task.CompletedTask;
+    }),
     ("Startup lowers Windows instead of raising the monitor", async () =>
     {
         var f = new Fixture(80, 40); await f.Start();

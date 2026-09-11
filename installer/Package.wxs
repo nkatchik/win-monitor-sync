@@ -14,10 +14,10 @@
       <Directory Id="UserProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="MonitorSync">
           <Component Id="StartupPreference" Guid="CE6656A0-5EAC-413E-9C74-609015D45701" NeverOverwrite="yes">
-            <!-- Empty means disabled. Preserve the app's setting on upgrade/repair;
+            <!-- Enabled on a fresh install. Preserve the app's setting on upgrade/repair;
                  MSI ownership removes this value on uninstall. -->
             <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run"
-                           Name="MonitorSync" Type="string" Value="" KeyPath="yes" />
+                           Name="MonitorSync" Type="string" Value="&quot;[INSTALLFOLDER]MonitorSync.exe&quot; --background" KeyPath="yes" />
           </Component>
         </Directory>
       </Directory>

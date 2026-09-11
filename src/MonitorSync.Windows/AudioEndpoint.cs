@@ -3,7 +3,8 @@ using MonitorSync.Core;
 
 namespace MonitorSync.Windows;
 
-public sealed record AudioDeviceInfo(string Id, string Name, int Percent, bool Muted, uint HardwareSupport);
+public sealed record AudioDeviceInfo(string Id, string Name, int Percent, bool Muted, uint HardwareSupport,
+    string? MonitorName = null, bool IsDisplayAudio = false);
 public sealed class AudioRouteChangedException(string message) : IOException(message);
 
 public sealed class AudioEndpoint : IAudioVolume, IDisposable
@@ -41,7 +42,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (DefaultId(_enumerator) != _id)
-            throw new AudioRouteChangedException("The default playback device changed. Sync will wait for the paired output.");
+            throw new AudioRouteChangedException("The default playback device changed. Sync will check the new output.");
         var revision = _callback.Revision;
         HResult(_volume.GetMasterVolumeLevelScalar(out var value));
         HResult(_volume.GetMute(out var muted));
@@ -71,7 +72,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
             try
             {
                 HResult(device.GetId(out var id));
-                var name = FriendlyName(device) ?? id;
+                var (name, monitorName, isDisplayAudio) = DescribeProperties(device);
                 var iid = typeof(IAudioEndpointVolume).GUID;
                 HResult(device.Activate(ref iid, 23, IntPtr.Zero, out var activated));
                 var volume = (IAudioEndpointVolume)activated;
@@ -80,7 +81,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
                     HResult(volume.GetMasterVolumeLevelScalar(out var scalar));
                     HResult(volume.GetMute(out var muted));
                     HResult(volume.QueryHardwareSupport(out var support));
-                    return new(id, name, ToPercent(scalar), muted, support);
+                    return new(id, name ?? id, ToPercent(scalar), muted, support, monitorName, isDisplayAudio);
                 }
                 finally { Release(volume); }
             }
@@ -96,15 +97,25 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
         finally { Release(device); }
     }
 
-    private static string? FriendlyName(IMMDevice device)
+    private static (string? Name, string? MonitorName, bool IsDisplayAudio) DescribeProperties(IMMDevice device)
     {
         HResult(device.OpenPropertyStore(0, out var properties));
         try
         {
-            var key = new PropertyKey { FormatId = new("A45C254E-DF1C-4EFD-8020-67D146A850E0"), Id = 14 };
-            HResult(properties.GetValue(ref key, out var value));
-            try { return value.Type == 31 ? Marshal.PtrToStringUni(value.Pointer) : null; }
-            finally { PropVariantClear(ref value); }
+            string? ReadName(uint propertyId)
+            {
+                var key = new PropertyKey { FormatId = new("A45C254E-DF1C-4EFD-8020-67D146A850E0"), Id = propertyId };
+                HResult(properties.GetValue(ref key, out var value));
+                try { return value.Type == 31 ? Marshal.PtrToStringUni(value.Pointer) : null; }
+                finally { PropVariantClear(ref value); }
+            }
+            var name = ReadName(14); // PKEY_Device_FriendlyName (may be renamed by the user).
+            var monitorName = ReadName(2); // PKEY_Device_DeviceDesc (driver's endpoint description).
+            var formFactor = new PropertyKey { FormatId = new("1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E"), Id = 0 };
+            HResult(properties.GetValue(ref formFactor, out var form));
+            // VT_UI4, EndpointFormFactor.DigitalAudioDisplayDevice (HDMI / DisplayPort).
+            try { return (name, monitorName, form.Type == 19 && form.UnsignedValue == 9); }
+            finally { PropVariantClear(ref form); }
         }
         finally { Release(properties); }
     }
@@ -199,6 +210,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
     {
         [FieldOffset(0)] public ushort Type;
         [FieldOffset(8)] public IntPtr Pointer;
+        [FieldOffset(8)] public uint UnsignedValue;
     }
     [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IPropertyStore

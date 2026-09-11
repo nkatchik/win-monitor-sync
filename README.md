@@ -8,12 +8,12 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial
 
 - Windows Quick Settings, volume keys, and other endpoint-volume controls drive monitor volume.
 - Monitor-button changes are checked every five seconds and update Windows without a feedback loop.
-- Enabling or resuming sync aligns both controls to the lower current percentage. Saved volume levels are never restored.
-- Rapid input is coalesced, writes are read back, and failed or unconfirmed operations pause sync.
-- Only the explicitly paired default playback output is managed. Switching to headphones suspends sync; returning to the paired output attempts to resume it.
+- Sync starts automatically and aligns both controls to the lower current percentage. Saved volume levels are never restored.
+- Rapid input is coalesced and writes are read back. Failed or unconfirmed operations stop the current connection and retry automatically after ten seconds.
+- The current HDMI/DisplayPort audio output is matched to a monitor automatically. Switching to headphones suspends monitor control; returning to monitor speakers resumes it.
 - Windows mute and individual application volumes are preserved. Monitor hardware mute is not synchronized.
-- A tray menu provides Open, Pause, and Exit. Starting with Windows is optional.
-- The settings window also has direct hardware brightness control. **Native Windows brightness integration remains unimplemented.**
+- The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows sync status and an **Exit** action.
+- There is no settings window, pairing step, pause switch, or custom slider. **Native Windows brightness integration remains unimplemented.**
 
 This is simple percentage synchronization. Windows and monitor attenuation both remain active, so matching 50% settings can sound quieter than ordinary Windows 50%. It does not keep the Windows audio gain at 100%. The actual response depends on both devices' volume curves; see [the design](DESIGN.md).
 
@@ -21,12 +21,14 @@ This is simple percentage synchronization. Windows and monitor attenuation both 
 
 1. Enable **DDC/CI** in the Dell's on-screen menu. Start with a direct HDMI connection and select the Dell speakers as the default Windows playback output.
 2. Set both volumes to comfortable levels. Extract the complete preview ZIP into a folder and run `MonitorSync.exe`; keep the worker and runtime files together.
-3. Select the Dell in Monitor Sync and check the displayed playback output. Click **Enable / resume sync** to confirm that pairing.
+3. Sync starts in the tray without opening a window. Right-click its icon to check the status or change **Start with Windows**.
 4. Try Windows Quick Settings and volume keys, then the Dell's volume buttons. Allow up to five seconds for monitor-button changes to appear in Windows.
 
-Closing the settings window leaves the tray app running. Use **Exit** to stop it. A previously enabled pairing can resume at the next launch. **Pause** disables that saved preference. The app leaves current volumes in place on exit.
+Use **Exit** in the tray to stop the app. It leaves current volumes in place and starts syncing again on the next launch. Turning off **Start with Windows** is remembered across launches and upgrades; it does not stop the current session. Old saved pairing and pause settings are no longer used.
 
-If DDC fails, the status explains the failure and ordinary Windows volume remains usable. Use **Refresh devices**, verify the pairing, and enable sync again. A port change can create a new Windows audio endpoint and require a new pairing. Clone mode and ambiguous physical display mappings are not supported in this preview.
+If DDC fails, the tray shows that the monitor is unavailable while automatic retries continue. Ordinary Windows volume remains usable. Enable DDC/CI in the monitor's menu and select its speakers in Windows; no in-app configuration is required.
+
+Automatic selection requires Windows to identify the output as display audio and its driver-provided monitor name to match exactly one enumerated monitor model after connector suffixes are removed. This is a conservative naming heuristic, not a hardware identity guarantee. Missing/mismatched names, duplicate models, clone mode, and ambiguous physical mappings remain unsupported; the app waits rather than guessing.
 
 The generated preview is unsigned. A trusted public MSI has not been produced. Signing and real Windows installation tests are required before consumer distribution; a fresh signature alone cannot guarantee SmartScreen reputation. [Microsoft's guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)
 
@@ -42,9 +44,9 @@ For local debugging on Windows, use Windows PowerShell 5.1 or PowerShell 7:
 ./scripts/debug.ps1 -DiagnosticsOnly
 ```
 
-The script builds Debug binaries, runs the sync tests, and opens the app. The diagnostics option instead saves a timestamped JSON report under `artifacts/debug`. Use **Exit** to close a running app before rebuilding. A normal launch can resume a previously enabled pairing.
+The script builds Debug binaries, runs the tests, publishes the app and worker to `artifacts/debug/app`, and starts the tray app with automatic sync. The diagnostics option instead saves a timestamped JSON report under `artifacts/debug` without changing startup preferences or enabling sync. Use **Exit** in the tray before rebuilding.
 
-The script uses an SDK extracted into `.tools/dotnet` when present, otherwise `dotnet` from PATH. It sets the runtime location for both the app and its worker for that launch, so another tool's `DOTNET_ROOT` does not select an incompatible runtime. SDK setup is separate; the script does not download it or change machine-wide environment settings.
+The script uses an SDK extracted into `.tools/dotnet` when present, otherwise `dotnet` from PATH. With a local SDK it also embeds its relative location into the development executables, allowing the app and worker to start at login without this shell's environment. Keep the repository and SDK together. SDK setup is separate; the script does not download it or change machine-wide environment settings.
 
 On Windows, with PowerShell 7 and the SDK installed:
 
@@ -86,7 +88,7 @@ gh workflow run release.yml --repo nkatchik/win-monitor-sync --ref main -f versi
 
 The supplied workflows produce **unsigned** packages. They require no signing secrets. The manual workflow verifies checksums and attaches all packages to a draft before publishing it. If publication fails after creating the draft, review that draft before retrying the same version. Only the publication job receives permission to create releases.
 
-The version input is applied to the MSI, filenames, application assemblies, settings-window version, and diagnostics. Build and release workflows do not establish live monitor compatibility or installation behavior on a real PC.
+The version input is applied to the MSI, filenames, application assemblies, and diagnostics. Build and release workflows do not establish live monitor compatibility or installation behavior on a real PC.
 
 ## Tests and diagnostics
 
@@ -98,7 +100,7 @@ dotnet build MonitorSync.slnx -c Release --no-restore --disable-build-servers -m
 dotnet tests/MonitorSync.Tests/bin/Release/net10.0/MonitorSync.Tests.dll
 ```
 
-Use **Save diagnostics** in the app, or run this on Windows for a read-only JSON report:
+Run this on Windows for a read-only JSON report:
 
 ```powershell
 Start-Process ./MonitorSync.exe -ArgumentList '--diagnostics', 'report.json' -Wait
@@ -115,8 +117,8 @@ Build and unit-test results do not establish real monitor support. See [Windows 
 | `MonitorSync.Core` | Transport-independent synchronization and conflict handling |
 | `MonitorSync.Windows` | Core Audio COM and monitor DDC interop |
 | `MonitorSync.Worker` | Isolated, serialized DDC calls with parent-exit cleanup |
-| `MonitorSync.App` | WPF setup window, tray, lifecycle, worker deadlines, settings |
+| `MonitorSync.App` | Tray, automatic connection lifecycle, worker deadlines, startup preference |
 | `MonitorSync.Tests` | Deterministic tests with fake audio and monitor transports |
 | `MonitorSync.Packaging` | WiX payload authoring for per-user installation |
 
-The worker has a three-second deadline for individual operations and twenty seconds for enumeration. A timeout terminates the helper and pauses the affected operation; Windows audio is never passed through the app. This contains a hung user-mode call, but cannot protect Windows from a fault in an existing graphics driver.
+The worker has a three-second deadline for individual operations and twenty seconds for enumeration. A timeout terminates the helper; the app retries with a fresh connection after ten seconds. Windows audio is never passed through the app. This contains a hung user-mode call, but cannot protect Windows from a fault in an existing graphics driver.

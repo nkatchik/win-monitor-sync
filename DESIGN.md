@@ -1,6 +1,6 @@
 # Monitor Sync for Windows 11
 
-Design and implementation status, 9 September 2026. Native Windows sliders remain a requirement. The selected first step is simple equal-percentage volume synchronization. A WPF app, isolated DDC worker, deterministic sync tests, and per-user MSI authoring are implemented. The Windows x64 build has been cross-compiled, and GitHub Actions now provides automatic Windows build/test/package validation plus manual versioned releases. Windows app execution, MSI installation, Dell testing, signing, and native brightness integration remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 11 September 2026. The app runs entirely in the tray with automatic equal-percentage volume sync. Its only setting is **Start with Windows**, enabled by default. Windows execution and initial Dell HDMI readback/sync checks have passed. MSI installation, sustained hardware reliability, signing, and native brightness integration remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
 No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Native Windows sliders remain the desired interface; hardware-only volume and native external brightness must not be promised where those APIs cannot provide them.
 
@@ -13,7 +13,7 @@ No custom driver will be developed. Use an ordinary application and the existing
 - Initial hardware: Dell S2725QS over HDMI, with DisplayPort available for testing. Audio over the selected video connection is the working assumption pending endpoint discovery.
 - Design the monitor transport for HDMI and DisplayPort; expand compatibility only when each complete connection path is verified.
 - Easy MSI installation with a verified publisher and a distribution strategy that avoids alarming security warnings.
-- A settings window can handle setup and diagnostics. A replacement tray slider does not satisfy the native-control requirement.
+- No settings window or custom slider. The tray contains status, **Start with Windows** (on by default), and **Exit**. Everything supported runs automatically; there is no pairing or pause configuration. Diagnostics remain available through the command line.
 
 ## Feasibility assessment
 
@@ -87,33 +87,33 @@ Probe brightness (`0x10`) and speaker volume (`0x62`). Investigate mute (`0x8D`)
 
 Keep native DDC calls in a restartable worker process, separate from audio notifications and UI. Process isolation can contain a hung user-mode call; it cannot protect against a kernel driver fault. Serialize operations initially across the worker, and re-enumerate handles after restarting it.
 
-The coordinator tracks stable display identity, explicit endpoint pairing, capability status, raw range, desired value, observed value/time, operation revision, and connection generation. EDID identifiers and device paths assist pairing; display numbers and friendly names alone are insufficient. Ambiguous pairing disables control until resolved.
+The coordinator discovers a fresh connection automatically. It requires an HDMI/DisplayPort audio endpoint and matches the driver's endpoint description to exactly one enumerated monitor model, ignoring connector suffixes and Windows' numeric prefixes. Duplicate models are rejected even if only one reports readable volume. This naming heuristic supports the initial Dell setup; it is not a hardware identity guarantee and cannot resolve every driver or multi-display topology. Missing, mismatched, or ambiguous descriptions leave the app waiting without adding a pairing setting. Once selected, the live endpoint ID and monitor device path identify the current connection. [Display audio form factor](https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioendpoint-formfactor), [device properties](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-properties)
 
 Synchronization rules:
 
 1. Read live values on discovery. Do not apply a stale saved profile at startup.
 2. Normalize against verified feature ranges. Coalesce rapid requests to the newest value, with roughly 100 ms as an initial tuning target.
 3. Read back after settling. Publish the value actually applied, including clamping, without confusing it with newer pending intent.
-4. Poll slowly when idle, initially about every five seconds. The preview pauses on failed or unconfirmed operations and requires a refresh after DDC failure. Readback is eventual, not instantaneous.
+4. Poll slowly when idle, initially about every five seconds. Failed or unconfirmed operations end the current connection; automatic discovery retries after ten seconds. Readback is eventual, not instantaneous.
 5. Observed external changes update native logical controls without generating a new hardware command. Tag origin/revision to prevent feedback loops.
 6. Discard work from old connections. Re-enumerate after sleep, display changes, or audio-route changes.
 7. Mark unreadable or unavailable controls as such. Cached values must not be presented as verified hardware state.
 
 ## Audio lifecycle and recovery
 
-Only manage an explicitly paired active playback endpoint. Switching to headphones or an unrelated device suspends monitor-volume synchronization. Discovery reads current state without changing audio levels; enabling synchronization must not unexpectedly raise the monitor volume.
+Only manage the default playback endpoint when it is display audio with one matching monitor. Switching to headphones suspends monitor control. The app checks the playback route every two seconds while waiting, and rebuilds the connection after a route change. Initial connection and recovery align both controls to the lower live volume; no saved pairing or enabled/paused state is used.
 
 In equal-value mode, a confirmed monitor-button change updates the Windows setting once; self-originated notifications must not cause another DDC write. With mapped sync, reverse updates require a defined invertible mapping, quantization tolerance, and behavior for hardware values outside its range. Do not claim exact reverse synchronization where those conditions are not met.
 
 Preserve ordinary Windows mute behavior. Hardware mute, if separately offered, needs verified monitor-specific support. The initial volume mapping applies to ordinary shared-mode playback; exclusive-mode playback can bypass Windows software attenuation, changing the effective response. [Shared and exclusive audio controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
-If a DDC write fails, keep Windows volume functional, suspend failed hardware synchronization, and show the mismatch. On exit or a crash, ordinary Windows audio continues because no audio stream is routed through our process. Do not restore stale values or force monitor volume to maximum during recovery.
+If a DDC operation fails, keep Windows volume functional, show an unavailable status in the tray, and retry with a fresh connection. Sleep cancels outstanding work until resume. A single asynchronous loop owns connection discovery and sync, preventing overlapping reconnect operations. On exit or a crash, ordinary Windows audio continues because no audio stream is routed through our process. Do not restore stale values or force monitor volume to maximum during recovery.
 
 ## Components and packaging
 
-The implementation uses C# with WPF, Core Audio callbacks for change revisions, a DDC worker, and a settings/diagnostics window. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
+The implementation uses C# with a WPF dispatcher (no application window), a Windows Forms tray icon, Core Audio callbacks for change revisions, and an isolated DDC worker. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
 
-Build a per-user MSI with WiX, bundle all runtime dependencies, and target normal installation without elevation on an unmanaged Windows 11 PC. Include upgrade, repair, uninstall, and optional start-at-login behavior. WiX's current release policy includes a maintenance fee for revenue-generating use. [Installation contexts](https://learn.microsoft.com/en-us/windows/win32/msi/installation-context), [WiX](https://docs.firegiant.com/wix/)
+Build a per-user MSI with WiX, bundle all runtime dependencies, and target normal installation without elevation on an unmanaged Windows 11 PC. Startup is enabled on a fresh installation or first portable launch. An empty startup registry value records an explicit opt-out; initialization, upgrade, and repair preserve it. Enabled startup entries refresh to the current executable path, and MSI ownership removes the entry on uninstall. WiX's current release policy includes a maintenance fee for revenue-generating use. [Installation contexts](https://learn.microsoft.com/en-us/windows/win32/msi/installation-context), [WiX](https://docs.firegiant.com/wix/)
 
 Sign and timestamp application payloads, verify dependency signatures, assemble the MSI, then sign and timestamp it. No custom kernel driver means no driver-submission or driver-certification dependency. Choose the application signing provider after establishing publisher eligibility.
 

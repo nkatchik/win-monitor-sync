@@ -78,7 +78,7 @@ public sealed class PhysicalMonitors : IDisposable
     {
         if (code is not (0x10 or 0x62)) throw new IOException("Only brightness and volume are supported.");
         if (!_handles.TryGetValue(id, out var physical))
-            throw new IOException("The paired monitor is unavailable. Refresh displays.");
+            throw new IOException("The monitor is unavailable. Display discovery will retry.");
         return physical.Handle;
     }
 

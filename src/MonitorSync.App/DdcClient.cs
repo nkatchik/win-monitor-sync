@@ -54,7 +54,7 @@ public sealed class DdcClient : IDisposable
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         {
             Stop();
-            throw new IOException("The monitor stopped responding. Sync is paused; refresh to retry.");
+            throw new IOException("The monitor stopped responding. Sync will retry automatically.");
         }
         catch (OperationCanceledException) { Stop(); throw; }
         catch (IOException) { Stop(); throw; }
