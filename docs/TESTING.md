@@ -7,13 +7,31 @@
 - All 22 deterministic synchronization tests pass. Cases cover initial alignment, coalescing and held keys, external changes, mute preservation, stale operations, delayed confirmation, write failures, quantization, cancellation, and output switching.
 - Self-contained Windows x64 application and worker publication.
 
-These local checks do not execute Windows COM, DDC, WPF, MSI installation, or the Dell hardware. WiX explicitly reports Windows-only support, so the final MSI build runs in [Windows CI](https://github.com/nkatchik/win-monitor-sync/actions/workflows/build.yml). CI builds the application, runs the 22 sync tests, builds and validates the MSI, and uploads the packages. Refer to each run for its actual result. Installation, real monitor behavior, and ARM64 remain untested.
+These macOS checks do not execute Windows COM, DDC, WPF, MSI installation, or the Dell hardware. WiX explicitly reports Windows-only support, so the final MSI build runs in [Windows CI](https://github.com/nkatchik/win-monitor-sync/actions/workflows/build.yml). CI builds the application, runs the 22 sync tests, builds and validates the MSI, and uploads the packages. Refer to each run for its actual result. Initial Windows hardware results are recorded below; installation and ARM64 remain untested.
 
 Both workflows pass actionlint validation. A local build using `-p:Version=1.2.3` was also inspected: both app and worker assemblies report `1.2.3`. The manual publication workflow is available with a required version input; creating a release is separate from verifying an automatic build.
 
 The [first Windows CI run](https://github.com/nkatchik/win-monitor-sync/actions/runs/34363624736) passed on 9 September 2026: build, tests, MSI packaging, and artifact upload. This verifies package creation, not installation or live DDC behavior.
 
 ## Dell S2725QS acceptance
+
+### Windows hardware debug session, 11 September 2026
+
+Tested on Windows 11 Pro build 26200, x64, with an NVIDIA GeForce RTX 3070 (driver `32.0.15.9186`) and a Dell S2725QS on HDMI1. The default output was `DELL S2725QS (NVIDIA High Definition Audio)`. The repository-local .NET 10.0.401 SDK was downloaded from Microsoft and its archive SHA-512 verified against Microsoft's release metadata.
+
+- Debug solution build: zero warnings and errors; all 22 deterministic tests passed.
+- The app's read-only diagnostics successfully exercised WPF startup, Core Audio, worker launch, physical-monitor enumeration, and DDC reads. Initial readings were Windows volume 14%, monitor volume 45/100, brightness 100/100, and Windows mute off.
+- Direct DDC volume changes 45 → 44 → 45 and brightness changes 100 → 99 → 100 were confirmed by readback.
+- A temporary hardware harness using the production sync engine and Windows adapters confirmed initial alignment to 14%, a Windows endpoint change to 13% reaching the monitor, and a direct monitor change to 12% reaching Windows through the default five-second poll. The initially unmuted state was preserved.
+- Cleanup restored Windows volume 14%, monitor volume 45%, and brightness 100%.
+- A subsequent read-only probe completed 80/80 volume reads successfully. The final app diagnostic report confirmed the original values.
+- `scripts/debug.ps1 -DiagnosticsOnly` passed on Windows PowerShell 5.1 and restored the caller's runtime environment. The visible Debug app reached its ready-to-pair state with both controls available and sync disabled.
+
+The first hardware sync attempt encountered a DDC volume-read failure; cleanup still restored the initial values. A traced repeat passed. Native DDC errors now include the Windows error code and system message to make a recurrence diagnosable. This does not establish sustained reliability.
+
+These checks used API writes and readback. Physical monitor buttons, Quick Settings/media-key interaction, audible/visible effects, mute toggling, HDR behavior, DisplayPort, reconnect/sleep, and installation still need interactive validation. Local reports and traces are under ignored `artifacts/debug`; device identifiers are not checked into the repository.
+
+### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
 

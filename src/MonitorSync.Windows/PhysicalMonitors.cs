@@ -88,7 +88,12 @@ public sealed class PhysicalMonitors : IDisposable
         _handles.Clear();
     }
 
-    private static void ThrowLast(string operation) => throw new Win32Exception(Marshal.GetLastWin32Error(), operation + " failed");
+    private static void ThrowLast(string operation)
+    {
+        var error = Marshal.GetLastWin32Error();
+        throw new Win32Exception(error,
+            $"{operation} failed (Win32 0x{error:X8}): {new Win32Exception(error).Message}");
+    }
     private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr data);
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

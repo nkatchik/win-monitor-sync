@@ -2,7 +2,7 @@
 
 A Windows 11 preview that mirrors the native Windows volume percentage to a monitor's speakers, and reflects monitor-button volume changes back into Windows. It uses existing Windows APIs and DDC/CI; there is no custom driver, audio routing, or administrator service.
 
-The first target is the Dell S2725QS over HDMI, followed by DisplayPort. **Neither connection has been tested on hardware yet.**
+The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial HDMI hardware checks confirmed DDC readback and API-driven volume sync in both directions. An intermittent DDC read failure was also observed; interactive acceptance and DisplayPort testing remain incomplete. See [validation results](docs/TESTING.md).
 
 ## Preview behavior
 
@@ -33,6 +33,18 @@ The generated preview is unsigned. A trusted public MSI has not been produced. S
 ## Build and package
 
 Use the SDK pinned in `global.json` (.NET 10.0.401). The app bundles its runtime, so end users do not need to install .NET.
+
+For local debugging on Windows, use Windows PowerShell 5.1 or PowerShell 7:
+
+```powershell
+./scripts/debug.ps1
+# Build and test, then collect device readings without enabling sync:
+./scripts/debug.ps1 -DiagnosticsOnly
+```
+
+The script builds Debug binaries, runs the sync tests, and opens the app. The diagnostics option instead saves a timestamped JSON report under `artifacts/debug`. Use **Exit** to close a running app before rebuilding. A normal launch can resume a previously enabled pairing.
+
+The script uses an SDK extracted into `.tools/dotnet` when present, otherwise `dotnet` from PATH. It sets the runtime location for both the app and its worker for that launch, so another tool's `DOTNET_ROOT` does not select an incompatible runtime. SDK setup is separate; the script does not download it or change machine-wide environment settings.
 
 On Windows, with PowerShell 7 and the SDK installed:
 
