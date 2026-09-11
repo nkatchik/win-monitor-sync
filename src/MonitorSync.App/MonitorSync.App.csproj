@@ -6,6 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>MonitorSync</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WPF owns startup and reads DPI awareness from the manifest; Forms is only the tray icon. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

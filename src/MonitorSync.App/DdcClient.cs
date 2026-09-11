@@ -21,6 +21,13 @@ public sealed class DdcClient : IDisposable
     public async Task WriteAsync(string id, byte code, uint value, CancellationToken token = default) =>
         _ = await RequestAsync(new("write", id, code, value), token);
 
+    public async Task<VolumeReading> ReadCursorBrightnessAsync(string id, CancellationToken token) =>
+        (await RequestAsync(new("read-brightness", id), token)).Reading
+        ?? throw new IOException("The monitor returned no brightness value.");
+
+    public async Task WriteCursorBrightnessAsync(string id, uint value, CancellationToken token) =>
+        _ = await RequestAsync(new("write-brightness", id, Value: value), token);
+
     private async Task<WorkerResponse> RequestAsync(WorkerRequest request, CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -42,7 +49,7 @@ public sealed class DdcClient : IDisposable
                 _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) SettingsStore.Log(e.Data); };
                 _process.BeginErrorReadLine();
             }
-            if (!_initialized && request.Operation != "list")
+            if (!_initialized && request.Operation is ("read" or "write"))
             {
                 await SendAsync(new("list"), token);
                 _initialized = true;
@@ -73,6 +80,7 @@ public sealed class DdcClient : IDisposable
         WorkerResponse response;
         try { response = JsonSerializer.Deserialize<WorkerResponse>(line) ?? throw new JsonException(); }
         catch (JsonException e) { throw new IOException("Invalid monitor worker response.", e); }
+        if (response.TargetChanged) throw new MonitorTargetChangedException();
         if (!response.Success) throw new IOException(response.Error ?? "Monitor operation failed.");
         return response;
     }

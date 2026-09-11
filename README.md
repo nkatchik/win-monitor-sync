@@ -1,6 +1,6 @@
 # Monitor Sync
 
-A Windows 11 preview that mirrors the native Windows volume percentage to a monitor's speakers, and reflects monitor-button volume changes back into Windows. It uses existing Windows APIs and DDC/CI; there is no custom driver, audio routing, or administrator service.
+A Windows 11 tray app that syncs Windows volume with monitor speakers and controls brightness on the screen under the mouse cursor. Brightness uses DDC/CI directly, with a small Windows-style on-screen indicator. There is no custom driver, audio routing, or administrator service.
 
 The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial HDMI hardware checks confirmed DDC readback and API-driven volume sync in both directions. An intermittent DDC read failure was also observed; interactive acceptance and DisplayPort testing remain incomplete. See [validation results](docs/TESTING.md).
 
@@ -13,9 +13,11 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial
 - Volume follows the currently selected Windows playback output when it is a supported monitor. Switching to headphones suspends monitor control; returning to monitor speakers resumes it. Cursor position does not select the audio target.
 - Windows mute and individual application volumes are preserved. Monitor hardware mute is not synchronized.
 - The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows sync status and an **Exit** action.
-- There is no settings window, pairing step, pause switch, or custom slider. **Native Windows brightness integration remains unimplemented.**
+- **Ctrl+Alt+Page Up / Page Down** adjusts brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold the shortcut to keep adjusting.
+- A temporary brightness indicator appears at the bottom centre of that screen, follows the Windows light/dark theme, and fades away without taking focus. The displayed percentage comes from monitor readback.
+- There is no settings window, pairing step, or pause switch. Brightness bypasses the native Windows slider; the indicator is provided by this app.
 
-The intended brightness target is the screen under the mouse cursor, independently of audio output. If the correct monitor cannot be identified or controlled, sync must do nothing; it must not fall back to another screen. This brightness behavior is a requirement for future implementation.
+If the cursor's screen cannot be identified unambiguously or controlled through DDC/CI, brightness changes nothing. It never falls back to another screen. Moving the cursor alone does not change brightness; crossing screens discards pending work for the old target. Each new key burst starts with a fresh hardware reading, including changes made using the monitor's own buttons.
 
 This is simple percentage synchronization. Windows and monitor attenuation both remain active, so matching 50% settings can sound quieter than ordinary Windows 50%. It does not keep the Windows audio gain at 100%. The actual response depends on both devices' volume curves; see [the design](DESIGN.md).
 
@@ -25,6 +27,7 @@ This is simple percentage synchronization. Windows and monitor attenuation both 
 2. Set both volumes to comfortable levels. Extract the complete preview ZIP into a folder and run `MonitorSync.exe`; keep the worker and runtime files together.
 3. Sync starts in the tray without opening a window. Right-click its icon to check the status or change **Start with Windows**.
 4. Try Windows Quick Settings and volume keys, then the Dell's volume buttons. Allow up to five seconds for monitor-button changes to appear in Windows.
+5. Move the pointer onto the screen you want to adjust and press **Ctrl+Alt+Page Up** (brighter) or **Ctrl+Alt+Page Down** (dimmer). The tray menu includes a reminder of the shortcuts. If another app has already registered them, it reports that the shortcuts are unavailable.
 
 Use **Exit** in the tray to stop the app. It leaves current volumes in place and starts syncing again on the next launch. Turning off **Start with Windows** is remembered across launches and upgrades; it does not stop the current session. Old saved pairing and pause settings are no longer used.
 

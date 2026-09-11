@@ -58,11 +58,55 @@ public sealed class PhysicalMonitors : IDisposable
     public VolumeReading Read(string id, byte code)
     {
         var handle = Get(id, code);
+        return ReadHandle(handle, code);
+    }
+
+    private static VolumeReading ReadHandle(IntPtr handle, byte code)
+    {
         if (!GetVCPFeatureAndVCPFeatureReply(handle, code, IntPtr.Zero, out var current, out var maximum))
             ThrowLast($"Read VCP 0x{code:X2}");
         var reading = new VolumeReading(current, maximum);
         reading.Validate();
         return reading;
+    }
+
+    public VolumeReading ReadCursorBrightness(string id) => WithCursorMonitor(id,
+        (handle, target, reading) => reading);
+
+    public void WriteCursorBrightness(string id, uint value) => WithCursorMonitor(id, (handle, target, range) =>
+    {
+        if (value > range.Maximum) throw new IOException("Requested brightness exceeds the reported range.");
+        // This check happens inside the worker, after any queue wait and range read.
+        if (!target.IsCurrent()) throw new MonitorTargetChangedException();
+        if (!SetVCPFeature(handle, 0x10, value)) ThrowLast("Write VCP 0x10");
+        return true;
+    });
+
+    private static T WithCursorMonitor<T>(string id, Func<IntPtr, CursorDisplay, VolumeReading, T> action)
+    {
+        // Some Dell reads fail for a newly opened handle. Reopen only for failed
+        // reads; never repeat a write whose outcome could be uncertain.
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1) Thread.Sleep(500);
+            var target = CursorDisplay.Capture();
+            if (target is null || !string.Equals(target.Id, id, StringComparison.OrdinalIgnoreCase))
+                throw new MonitorTargetChangedException();
+            if (!GetNumberOfPhysicalMonitorsFromHMONITOR(target.Handle, out var count)) ThrowLast("Find brightness monitor");
+            if (count != 1) throw new IOException("The cursor's screen has no unique physical monitor.");
+            var physical = new PhysicalMonitor[1];
+            if (!GetPhysicalMonitorsFromHMONITOR(target.Handle, 1, physical)) ThrowLast("Open brightness monitor");
+            try
+            {
+                if (!target.IsCurrent()) throw new MonitorTargetChangedException();
+                VolumeReading reading;
+                try { reading = ReadHandle(physical[0].Handle, 0x10); }
+                catch (Win32Exception) when (attempt < 3) { continue; }
+                if (!target.IsCurrent()) throw new MonitorTargetChangedException();
+                return action(physical[0].Handle, target, reading);
+            }
+            finally { DestroyPhysicalMonitor(physical[0].Handle); }
+        }
     }
 
     public void Write(string id, byte code, uint value)

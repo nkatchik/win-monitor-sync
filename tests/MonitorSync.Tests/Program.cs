@@ -2,6 +2,100 @@ using MonitorSync.Core;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Brightness reads live hardware and only displays confirmed changes", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start();
+        Equal(40, f.Engine.Percent); Equal(0, f.Monitor.Writes.Count);
+        await f.Tick(99); Equal(0, f.Monitor.Writes.Count);
+        await f.Tick(100); Equal(35u, f.Monitor.Current); Equal(40, f.Engine.Percent);
+        await f.Tick(300); Equal(35, f.Engine.Percent); Equal(false, f.Engine.IsPending);
+    }),
+    ("Brightness input during discovery preserves clamping and reversal order", async () =>
+    {
+        var f = new BrightnessFixture(100);
+        f.Engine.Step(5);
+        f.Monitor.OnRead = () => { f.Engine.Step(-5); return Task.CompletedTask; };
+        await f.Start(); f.Monitor.OnRead = null; await f.Tick(100); await f.Tick(300);
+        Equal(95, f.Engine.Percent); Equal(1, f.Monitor.Writes.Count);
+    }),
+    ("Brightness at either limit does not write", async () =>
+    {
+        foreach (var (raw, delta) in new[] { (0u, -5), (100u, 5) })
+        {
+            var f = new BrightnessFixture(raw); f.Engine.Step(delta); await f.Start(); await f.Tick(1000);
+            Equal(false, f.Engine.IsPending); Equal(0, f.Monitor.Writes.Count);
+        }
+    }),
+    ("Held brightness keys coalesce without postponing the deadline", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(5); await f.Start();
+        for (var t = 20; t <= 100; t += 20) { f.Engine.Step(5); await f.Tick(t); }
+        Equal(1, f.Monitor.Writes.Count); Equal(70u, f.Monitor.Current);
+        await f.Tick(300); Equal(70, f.Engine.Percent);
+    }),
+    ("Brightness input during a delayed write supersedes its completion", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(5); await f.Start();
+        f.Monitor.OnWrite = () => { f.Engine.Step(5); return Task.CompletedTask; };
+        await f.Tick(100); f.Monitor.OnWrite = null;
+        await f.Tick(200); await f.Tick(400);
+        Equal(50, f.Engine.Percent); Equal(2, f.Monitor.Writes.Count);
+    }),
+    ("Brightness input during confirmation supersedes old readback", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(5); await f.Start(); await f.Tick(100);
+        f.Monitor.OnRead = () => { f.Engine.Step(-5); return Task.CompletedTask; };
+        await f.Tick(300); f.Monitor.OnRead = null;
+        Equal(true, f.Engine.IsPending); await f.Tick(400); await f.Tick(600);
+        Equal(40, f.Engine.Percent); Equal(40u, f.Monitor.Current);
+    }),
+    ("Moving the cursor before a brightness write discards the request", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start(); f.TargetCurrent = false;
+        await Throws<MonitorTargetChangedException>(() => f.Tick(100)); Equal(0, f.Monitor.Writes.Count);
+    }),
+    ("Moving the cursor during brightness discovery prevents any write", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5);
+        f.Monitor.OnRead = () => { f.TargetCurrent = false; return Task.CompletedTask; };
+        await Throws<MonitorTargetChangedException>(f.Start); Equal(false, f.Engine.HasReading);
+        Equal(0, f.Monitor.Writes.Count);
+    }),
+    ("Moving the cursor during brightness readback discards the old result", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start(); await f.Tick(100);
+        f.Monitor.OnRead = () => { f.TargetCurrent = false; return Task.CompletedTask; };
+        await Throws<MonitorTargetChangedException>(() => f.Tick(300)); Equal(40, f.Engine.Percent);
+    }),
+    ("Cancellation during brightness discovery prevents any write", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5);
+        using var cts = new CancellationTokenSource();
+        f.Monitor.OnRead = () => { cts.Cancel(); return Task.CompletedTask; };
+        await Throws<OperationCanceledException>(() => f.Engine.StartAsync(cts.Token));
+        Equal(0, f.Monitor.Writes.Count); Equal(false, f.Engine.HasReading);
+    }),
+    ("Unconfirmed brightness fails after bounded reads without reporting success", async () =>
+    {
+        var f = new BrightnessFixture(); f.Monitor.ApplyWrites = false; f.Engine.Step(-5);
+        await f.Start(); await f.Tick(100); await f.Tick(300); await f.Tick(500);
+        await Throws<IOException>(() => f.Tick(700)); Equal(40, f.Engine.Percent);
+        Equal(1, f.Monitor.Writes.Count);
+    }),
+    ("Brightness displays actual hardware quantization", async () =>
+    {
+        var f = new BrightnessFixture(15, 30); f.Engine.Step(5); await f.Start();
+        await f.Tick(100); await f.Tick(300);
+        Equal(17u, f.Monitor.Current); Equal(57, f.Engine.Percent);
+    }),
+    ("Brightness range changes and read errors cannot confirm a write", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start(); await f.Tick(100);
+        f.Monitor.Maximum = 200;
+        await Throws<IOException>(() => f.Tick(300)); Equal(40, f.Engine.Percent);
+        f.Monitor.OnRead = () => throw new IOException("Disconnected");
+        await Throws<IOException>(() => f.Tick(500)); Equal(40, f.Engine.Percent);
+    }),
     ("Automatically matches display audio to its monitor model", () =>
     {
         var monitor = new MonitorDescriptor("dell", "Dell S2725QS(HDMI1)", new(45, 100), null, null);
@@ -228,6 +322,17 @@ sealed class Fixture(int percent = 40, uint raw = 40, uint maximum = 100)
     public long Now;
     private VolumeSynchronizer? _engine;
     public VolumeSynchronizer Engine => _engine ??= new(Audio, Monitor, () => Now);
+    public Task Start() => Engine.StartAsync(CancellationToken.None);
+    public Task Tick(long milliseconds) { Now = milliseconds; return Engine.TickAsync(CancellationToken.None); }
+}
+
+sealed class BrightnessFixture(uint raw = 40, uint maximum = 100)
+{
+    public readonly FakeMonitor Monitor = new(raw, maximum);
+    public long Now;
+    public bool TargetCurrent = true;
+    private BrightnessAdjuster? _engine;
+    public BrightnessAdjuster Engine => _engine ??= new(Monitor, () => TargetCurrent, () => Now);
     public Task Start() => Engine.StartAsync(CancellationToken.None);
     public Task Tick(long milliseconds) { Now = milliseconds; return Engine.TickAsync(CancellationToken.None); }
 }

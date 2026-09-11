@@ -50,4 +50,4 @@ public sealed record MonitorDescriptor(string Id, string Name,
 
 public sealed record WorkerRequest(string Operation, string? MonitorId = null, byte Code = 0, uint Value = 0);
 public sealed record WorkerResponse(bool Success, string? Error = null,
-    MonitorDescriptor[]? Monitors = null, VolumeReading? Reading = null);
+    MonitorDescriptor[]? Monitors = null, VolumeReading? Reading = null, bool TargetChanged = false);

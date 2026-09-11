@@ -42,6 +42,18 @@ These checks used API writes and readback. Physical monitor buttons, Quick Setti
 
 Local integration traces and the final read-only report are under ignored `artifacts/debug`.
 
+### Direct brightness revision, 12 September 2026
+
+- Debug build: zero warnings and errors; all 43 deterministic tests passed. Thirteen brightness cases cover fresh readings, clamping, held input, delayed write/readback, target changes, cancellation, failed confirmation, quantization, and changed ranges.
+- The production tray app registered both brightness shortcuts and still exposed only **Start with Windows** and **Exit** as interactive tray items. No window existed at startup.
+- A temporary integration harness sent `WM_HOTKEY` to the registered handler. The real worker changed Dell brightness **100 → 95 → 100**, confirmed both values through DDC, and preserved Windows volume/mute. This passed both with headphones selected and with Dell audio selected; neither test changed the selected playback device.
+- An incorrect monitor ID was rejected without changing brightness or restarting the shared worker. Simulated suspend suppressed brightness requests and hid the indicator; exit closed the app and worker cleanly.
+- At 150% scaling on the 3840×2160 Dell, the indicator's 510×144 physical-pixel window was centred within the work area. The foreground window was unchanged, and automatic dismissal passed. The dark-theme WPF rendering was inspected for layout, icon, bar, and text.
+- Intermittent DDC errors (`0xC0262589`) occurred with both cached and fresh handles. Reopening and retrying reads after 500 ms recovered during the completed checks; writes remain single-attempt. This does not establish sustained reliability.
+- Synthetic `SendInput` key injection made cursor capture unavailable and did not deliver the shortcut in this session. The successful checks used the registered hotkey message handler directly. Physical keyboard operation, cross-monitor movement, mixed DPI, high contrast, screen readers, HDR, and DisplayPort remain interactive acceptance items.
+
+Brightness and the startup registry entry were restored after the harness. Traces and the rendered indicator are under ignored `artifacts/debug`.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -62,19 +74,20 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Sleep / wake / cable reconnect | Pending operations are canceled; live handles are recreated; stale requests do not alter a new output |
 | Different input / port | New endpoint and monitor are discovered automatically when descriptions match uniquely |
 | Disable/re-enable DDC/CI | Tray shows unavailability and automatic retry recovers; Windows audio remains usable |
-| Brightness in SDR | Use the hardware probe to confirm backlight behavior; there is no app slider |
+| Brightness in SDR | Ctrl+Alt+Page Up / Page Down changes only the cursor's screen by 5%; confirm visible backlight change and monitor OSD readback |
 | Brightness in HDR | Record limitations; do not treat Windows SDR-content brightness as physical backlight control |
 | Multi-display / clone | Duplicate model names and ambiguous physical mappings leave sync waiting |
 | Audio output on display A, cursor on display B | Volume sync controls only A; cursor position does not redirect audio |
 | Selected audio monitor unavailable while another supports DDC | Neither that other monitor nor the Windows endpoint is changed by sync |
 | Worker/app termination | No audio interruption or forced volume reset; helper exits with its owner |
-| High DPI, keyboard, screen reader | Tray status, startup checkbox, and Exit are usable; no app window opens |
+| Brightness indicator | Resembles Windows in light/dark/high-contrast modes, remains readable at each DPI, takes no focus, and dismisses automatically |
+| High DPI, keyboard, screen reader | Tray status, startup checkbox, and Exit are usable; shortcut conflicts are reported; brightness announcements are usable |
 
 A successful DDC write reply is not sufficient: check the monitor's displayed value and audible/visible behavior. Measure the useful quiet-to-loud range before deciding whether a different mapping is needed. Exclusive-mode playback can have a different gain response from shared-mode playback.
 
-Native Windows brightness support remains a separate unresolved requirement. Passing a hardware brightness probe does not satisfy it.
+Brightness now bypasses the native Windows slider by design. It uses DDC directly and provides its own temporary indicator.
 
-When native brightness integration is implemented, verify that an adjustment targets only the screen under the cursor, even when audio plays through another monitor. Moving the cursor alone must not change brightness. An unsupported or ambiguous cursor target must produce no sync writes to any screen. Crossing to another screen or changing display topology during a pending adjustment must discard stale commands and readback. These are pending acceptance requirements, not passed tests.
+On multiple displays, verify that brightness targets only the screen under the cursor, even when audio plays through another monitor. Moving the cursor alone must not change brightness. An unsupported or ambiguous cursor target must produce no writes to any screen. Crossing to another screen or changing display topology during a pending adjustment must discard stale commands and readback. These remain hardware acceptance requirements; the corresponding engine guards are covered by deterministic tests.
 
 ## Windows installer and distribution
 

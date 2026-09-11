@@ -7,7 +7,8 @@ namespace MonitorSync.App;
 public sealed class SyncController : IDisposable
 {
     public static string BuildVersion => typeof(SyncController).Assembly.GetName().Version?.ToString(3) ?? "unknown";
-    private readonly DdcClient _ddc = new();
+    private readonly DdcClient _ddc;
+    private readonly bool _ownsDdc;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _connection;
     private Task _runTask = Task.CompletedTask;
@@ -17,6 +18,12 @@ public sealed class SyncController : IDisposable
     public event EventHandler? Changed;
     public string Status => _status;
     public string Levels => _levels;
+
+    public SyncController(DdcClient? client = null)
+    {
+        _ddc = client ?? new DdcClient();
+        _ownsDdc = client is null;
+    }
 
     public void Start()
     {
@@ -129,7 +136,7 @@ public sealed class SyncController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
-        _ddc.Dispose();
+        if (_ownsDdc) _ddc.Dispose();
         _lifetime.Dispose();
     }
 

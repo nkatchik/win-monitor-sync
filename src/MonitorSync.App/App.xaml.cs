@@ -12,6 +12,9 @@ public partial class App : System.Windows.Application
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _statusItem, _levelsItem, _startupItem;
     private SyncController? _controller;
+    private DdcClient? _ddc;
+    private BrightnessController? _brightness;
+    private BrightnessHotkeys? _brightnessHotkeys;
     private bool _exiting;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -39,7 +42,9 @@ public partial class App : System.Windows.Application
         _instance = new Mutex(true, @"Local\MonitorSync.SingleInstance", out var created);
         if (!created) { Shutdown(); return; }
 
-        _controller = new SyncController();
+        _ddc = new DdcClient();
+        _controller = new SyncController(_ddc);
+        _brightness = new BrightnessController(_ddc);
         _statusItem = new Forms.ToolStripMenuItem { Enabled = false };
         _levelsItem = new Forms.ToolStripMenuItem { Enabled = false };
         _startupItem = new Forms.ToolStripMenuItem("Start with Windows");
@@ -54,7 +59,8 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.AddRange([_statusItem, _levelsItem, new Forms.ToolStripSeparator(),
+        var brightnessHint = new Forms.ToolStripMenuItem("Brightness: Ctrl+Alt+Page Up / Page Down") { Enabled = false };
+        menu.Items.AddRange([_statusItem, _levelsItem, brightnessHint, new Forms.ToolStripSeparator(),
             _startupItem, new Forms.ToolStripSeparator()]);
         menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
         menu.Opening += (_, _) => UpdateStartupItem();
@@ -64,6 +70,16 @@ public partial class App : System.Windows.Application
             Text = "Monitor Sync", Visible = true, ContextMenuStrip = menu
         };
         _controller.Changed += (_, _) => UpdateStatus();
+        try
+        {
+            _brightnessHotkeys = new BrightnessHotkeys();
+            _brightnessHotkeys.Step += delta => _brightness.Adjust(delta);
+        }
+        catch (Exception error)
+        {
+            brightnessHint.Text = "Brightness shortcuts unavailable (already in use)";
+            SettingsStore.Log(error.ToString());
+        }
         UpdateStatus();
         SystemEvents.DisplaySettingsChanged += DisplayChanged;
         SystemEvents.PowerModeChanged += PowerChanged;
@@ -87,18 +103,28 @@ public partial class App : System.Windows.Application
         _tray.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
     }
 
-    private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() => _controller?.TopologyChanged());
+    private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() =>
+    {
+        _brightness?.Invalidate();
+        _controller?.TopologyChanged();
+    });
     private void PowerChanged(object sender, PowerModeChangedEventArgs e)
     {
         if (e.Mode is PowerModes.Suspend or PowerModes.Resume)
-            Dispatcher.InvokeAsync(() => _controller?.SetSuspended(e.Mode == PowerModes.Suspend));
+            Dispatcher.InvokeAsync(() =>
+            {
+                _brightness?.SetSuspended(e.Mode == PowerModes.Suspend);
+                _controller?.SetSuspended(e.Mode == PowerModes.Suspend);
+            });
     }
 
     public async Task ExitAsync()
     {
         if (_exiting) return;
         _exiting = true;
-        if (_controller is not null) await _controller.CloseAsync();
+        _brightnessHotkeys?.Dispose();
+        await Task.WhenAll(_brightness?.CloseAsync() ?? Task.CompletedTask,
+            _controller?.CloseAsync() ?? Task.CompletedTask);
         Shutdown();
     }
 
@@ -106,7 +132,10 @@ public partial class App : System.Windows.Application
     {
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
+        _brightnessHotkeys?.Dispose();
+        _brightness?.Dispose();
         _controller?.Dispose();
+        _ddc?.Dispose();
         var menu = _tray?.ContextMenuStrip;
         _tray?.Dispose();
         menu?.Dispose();

@@ -1,19 +1,19 @@
 # Monitor Sync for Windows 11
 
-Design and implementation status, 11 September 2026. The app runs entirely in the tray with automatic equal-percentage volume sync. Its only setting is **Start with Windows**, enabled by default. Windows execution and initial Dell HDMI readback/sync checks have passed. MSI installation, sustained hardware reliability, signing, and native brightness integration remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 12 September 2026. The app runs in the tray with automatic equal-percentage volume sync and direct DDC brightness shortcuts. Its only setting is **Start with Windows**, enabled by default. Brightness uses a temporary Windows-style indicator. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
-No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Native Windows sliders remain the desired interface; hardware-only volume and native external brightness must not be promised where those APIs cannot provide them.
+No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Volume uses native Windows controls. Brightness bypasses Windows brightness integration, as requested, and controls the monitor directly.
 
 ## Requirements
 
-- Windows Quick Settings volume and brightness sliders show and control the monitor values.
+- Windows Quick Settings volume controls monitor volume. Fixed brightness shortcuts control the screen under the cursor and show a Windows-style indicator.
 - Volume should feel like one control. Choose the tradeoff between equal Windows/monitor percentages and the combined volume curve; do not introduce a custom driver to bypass Windows attenuation.
 - No custom audio or display driver, virtual audio routing, or audio-processing bridge.
-- Monitor-button changes flow back into Windows after readback.
+- Monitor-button volume changes flow back into Windows after readback. Brightness reads the current hardware value at the start of each key burst.
 - Initial hardware: Dell S2725QS over HDMI, with DisplayPort available for testing. Audio over the selected video connection is the working assumption pending endpoint discovery.
 - Design the monitor transport for HDMI and DisplayPort; expand compatibility only when each complete connection path is verified.
 - Easy MSI installation with a verified publisher and a distribution strategy that avoids alarming security warnings.
-- No settings window or custom slider. The tray contains status, **Start with Windows** (on by default), and **Exit**. Everything supported runs automatically; there is no pairing or pause configuration. Diagnostics remain available through the command line.
+- No settings window. The tray contains status, a brightness shortcut reminder, **Start with Windows** (on by default), and **Exit**. Everything supported is always enabled; there is no pairing or pause configuration. Diagnostics remain available through the command line.
 
 ## Which monitor to control
 
@@ -21,9 +21,9 @@ No custom driver will be developed. Use an ordinary application and the existing
 - **Brightness:** use the screen containing the mouse cursor when a brightness adjustment is received. This target is independent of the playback output and can be a different monitor. Moving the cursor alone must not copy a brightness value between screens or change either screen's brightness.
 - **No fallback:** if the intended monitor cannot be identified unambiguously or does not support the required control, perform no synchronization writes. Do not substitute the primary screen, the audio monitor, the last working monitor, or another controllable display. Availability of another monitor is not a reason to control it.
 
-Recheck the target before applying a queued operation. An audio-route change, a cursor-screen change during a pending brightness adjustment, or a display-topology change invalidates pending work for the old target. Readback from an old target must not overwrite the new target's Windows control. Monitor-button brightness changes may update Windows only when that monitor is the current brightness target and a corresponding native control is available.
+Recheck the target before applying a queued operation. An audio-route change, a cursor-screen change during a pending brightness adjustment, or a display-topology change invalidates pending work for the old target. Readback from an old target must not overwrite the new target's indicator. Brightness does not write to any native Windows brightness control.
 
-Volume follows this policy through the current default-endpoint and monitor-matching implementation, subject to the naming limitations documented below. Cursor-targeted native brightness remains an implementation requirement; it is not an existing feature.
+Volume follows this policy through the current default-endpoint and monitor-matching implementation, subject to the naming limitations documented below. Brightness resolves the cursor's logical display to a device path and requires exactly one physical monitor. Both the application and worker check that target before applying brightness.
 
 ## Feasibility assessment
 
@@ -31,7 +31,7 @@ Volume follows this policy through the current default-endpoint and monitor-matc
 | --- | --- | --- |
 | Hardware brightness and volume | Windows has DDC/CI APIs; the Dell manual documents DDC/CI and monitor controls | Probe actual feature support and readback over each connection |
 | Native Windows volume | An ordinary app can observe endpoint changes and mirror them to DDC | Equal-value synchronization selected for the first preview |
-| Native Windows brightness | Windows uses monitor/graphics-driver brightness integration; there is no general app extension for adding our control to Quick Settings | Critical feasibility gate; no validated universal solution yet |
+| Native Windows brightness | This desktop exposes no supported WMI brightness control | Bypass it with direct DDC shortcuts and a Windows-style indicator |
 | MSI | Standard Windows Installer packaging is available | Bundle dependencies and support upgrade/uninstall |
 | Warning-free direct download | Signing alone does not guarantee SmartScreen reputation | Prefer a Store installation path; keep the signed MSI downloadable |
 
@@ -73,7 +73,7 @@ Equal-value sync is selected for the first preview. Measure and listen on the De
 
 Resetting the same physical endpoint to 100% also resets its native slider. A change callback cannot disconnect those two meanings. No such reset loop will be implemented. [Endpoint volume controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
-## Native brightness: first feasibility gate
+## Direct brightness with a Windows-style indicator
 
 Windows' system brightness integration is provided through `Monitor.sys`, graphics-driver brightness interfaces, and/or ACPI. Microsoft documents the operating system's brightness slider using that integration. [Integrated-panel architecture](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/supporting-brightness-controls-on-integrated-display-panels)
 
@@ -81,13 +81,13 @@ Microsoft also documents a `BrightnessControl` override for internal panels wire
 
 Twinkle Tray's project documentation likewise reports no official API for modifying the Windows Quick Settings flyout. A Windows-looking popup is therefore not evidence of native integration. [Twinkle Tray integration FAQ](https://github.com/xanderfrangos/twinkle-tray/wiki/Common-requests-%26-FAQs#integrating-with-the-windows-quick-settings-flyout)
 
-Within the no-custom-driver constraint, determine whether the PC exposes a native brightness control for the screen under the cursor. An existing laptop panel's brightness control is not a substitute for an external monitor's control: forwarding it would also change the laptop panel. If native control cannot address the intended screen correctly, do not mirror it to another monitor.
+The target desktop reports `Not supported` for `WmiMonitorBrightness` and `WmiMonitorBrightnessMethods`. The user therefore chose direct monitor control with on-screen feedback that resembles Windows. A laptop panel's native slider is not forwarded to an external monitor, and no native Quick Settings integration is claimed.
 
-If the PC has no usable existing brightness target, there is currently no verified supported app-only route to add the required native slider. Leave this requirement unresolved rather than substituting a custom popup without agreement. No new monitor filter/provider driver will be developed. Shell injection or a dummy display would also require a separate product decision and are not part of this proposal.
+**Ctrl+Alt+Page Up / Page Down** changes brightness by 5%. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 100 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
 
-The minimum successful demonstration is the real Windows brightness slider appearing on the intended PC, changing the physical Dell backlight, and receiving changes from the Dell's own controls. It must survive reboot, reconnect, and supported Windows updates without altering resolution, refresh rate, HDR capability, or desktop layout. On a desktop with no existing brightness control, this is the highest-risk part of the project.
+The noninteractive indicator has a sun icon, level bar, percentage, rounded corners, and Windows light/dark colours. It appears at the bottom centre of the target's work area, scales with that display's DPI, and fades after about two seconds. It neither activates nor appears in the taskbar and lets mouse input pass through. High contrast uses system colours and disables the shadow and animation. The tray remains the only place for configuration.
 
-The brightness target is the screen under the cursor, including in a multi-display setup. A single global Windows slider does not itself provide this targeting behavior. Implement it only if native control can be associated with that exact screen; otherwise leave brightness synchronization inactive. Do not add a fixed-target setting, linked display group, or fallback to the Dell.
+Brightness and volume share one serialized DDC worker. Brightness acquires a fresh physical handle for each operation, checks the cursor's monitor after queue waits and immediately before writing, and releases the handle afterward. Failed reads have up to three attempts with fresh handles, 500 ms apart, inside the worker's existing deadline; each attempt rechecks the target. Moving screens discards pending input and readback without restarting the shared worker. No fixed-target setting, linked display group, or fallback is used.
 
 ## Shared monitor-control engine
 
@@ -121,7 +121,7 @@ If a DDC operation fails, keep Windows volume functional, show an unavailable st
 
 ## Components and packaging
 
-The implementation uses C# with a WPF dispatcher (no application window), a Windows Forms tray icon, Core Audio callbacks for change revisions, and an isolated DDC worker. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
+The implementation uses C# with a WPF dispatcher and temporary brightness indicator, a Windows Forms tray icon, Core Audio callbacks for change revisions, and an isolated DDC worker. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
 
 Build a per-user MSI with WiX, bundle all runtime dependencies, and target normal installation without elevation on an unmanaged Windows 11 PC. Startup is enabled on a fresh installation or first portable launch. An empty startup registry value records an explicit opt-out; initialization, upgrade, and repair preserve it. Enabled startup entries refresh to the current executable path, and MSI ownership removes the entry on uninstall. WiX's current release policy includes a maintenance fee for revenue-generating use. [Installation contexts](https://learn.microsoft.com/en-us/windows/win32/msi/installation-context), [WiX](https://docs.firegiant.com/wix/)
 
@@ -135,10 +135,10 @@ For Store MSI submissions, provide signed installer/PE payloads, immutable versi
 
 1. **Read-only probe:** identify Windows build, GPU/driver, built-in-panel state, DDC ranges, current audio routing, and existing hardware-volume support.
 2. **Controlled Dell test:** verify reversible brightness/volume writes and monitor-button readback in SDR over HDMI, then DP. Restore test values. Record HDR behavior separately.
-3. **Native brightness assessment:** determine whether a native Windows brightness control can address the screen under the cursor without a custom driver or changing another screen. Report any unmet requirement explicitly and perform no synchronization writes when the correct target is unavailable.
+3. **Direct brightness:** verify shortcuts, confirmed readback, indicator appearance and focus behavior, and cursor targeting. Unsupported or ambiguous targets must cause no writes to another screen. Repeat on multiple displays and DPI scales.
 4. **Volume comparison:** compare ordinary Windows volume at a fixed monitor setting, equal-value synchronization, and a mapped curve. Inspect the endpoint's reported dB levels, measure monitor gain if calibration is needed, and test useful listening range, mute, transition timing, and readback. Do not infer acoustical gain from raw percentages alone.
 5. **Recovery and polish:** test feedback suppression and stale operations with a fake transport, then sleep, reconnects, endpoint changes, DDC failure, application exit, accessibility, and multiple displays on Windows.
 6. **Release installation:** verify signed per-user installation, upgrade, repair, rollback, uninstall, startup cleanup, and clean-machine behavior with Windows protections enabled.
 7. **Distribution:** test the browser-downloaded MSI and accepted Store install separately. Signature verification does not prove reputation or Store acceptance.
 
-No custom driver will be created. Equal-value volume sync is the selected first implementation. The remaining product decisions depend on its measured listening response and whether existing Windows brightness integration can meet the native-slider requirement on the target PC.
+No custom driver will be created. Equal-value volume sync and direct DDC brightness are the selected implementation. Remaining validation includes the measured listening response, multiple displays, HDR behavior, and release installation.

@@ -22,15 +22,23 @@ while (Console.ReadLine() is { } line)
             "list" => new(true, Monitors: monitors.Enumerate()),
             "read" => new(true, Reading: monitors.Read(request.MonitorId ?? "", request.Code)),
             "write" => Write(request),
+            "read-brightness" => new(true, Reading: monitors.ReadCursorBrightness(request.MonitorId ?? "")),
+            "write-brightness" => WriteBrightness(request),
             _ => new(false, "Unknown operation.")
         };
     }
-    catch (Exception e) { response = new(false, e.Message); }
+    catch (Exception e) { response = new(false, e.Message, TargetChanged: e is MonitorTargetChangedException); }
     Console.WriteLine(JsonSerializer.Serialize(response));
 }
 
 WorkerResponse Write(WorkerRequest request)
 {
     monitors.Write(request.MonitorId ?? "", request.Code, request.Value);
+    return new(true);
+}
+
+WorkerResponse WriteBrightness(WorkerRequest request)
+{
+    monitors.WriteCursorBrightness(request.MonitorId ?? "", request.Value);
     return new(true);
 }
