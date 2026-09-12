@@ -21,12 +21,23 @@ public sealed class SyncController : IDisposable
     public event EventHandler? Changed;
     public string Status => _status;
     public string Levels => _levels;
+    public bool CanControlVolume => !_suspended && _connection?.IsCancellationRequested == false &&
+        _audio?.IsCurrentRoute == true && _engine is not null;
+    public int? VolumePercent => CanControlVolume ? _engine!.MonitorPercent : null;
+    public bool IsPending => CanControlVolume && _engine!.IsPending;
+
+    public bool SetVolumePercent(int percent)
+    {
+        if (!CanControlVolume) return false;
+        _engine!.SetPercent(percent);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
 
     public bool TryQueueVolumeKey(int delta)
     {
-        if (_suspended || _connection?.IsCancellationRequested != false || _audio?.IsCurrentRoute != true || _engine is null)
-            return false;
-        if (delta == 0) _muteRequests++; else _engine.Step(delta);
+        if (!CanControlVolume) return false;
+        if (delta == 0) _muteRequests++; else _engine!.Step(delta);
         return true;
     }
 
@@ -66,7 +77,7 @@ public sealed class SyncController : IDisposable
                     var output = AudioEndpoint.DescribeDefault();
                     if (!output.IsDisplayAudio)
                     {
-                        SetStatus("Waiting for monitor speakers");
+                        SetStatus("No monitor speakers selected");
                     }
                     else
                     {
@@ -97,7 +108,7 @@ public sealed class SyncController : IDisposable
                                 await engine.TickAsync(token);
                                 token.ThrowIfCancellationRequested();
                                 SetStatus(engine.IsPending ? "Adjusting monitor volume…" : "Monitor volume control is on",
-                                    $"Monitor {engine.MonitorPercent}%{(engine.Muted ? " · Muted" : "")} · Windows {engine.WindowsPercent}%");
+                                    $"Volume {engine.MonitorPercent}%");
                                 await Task.Delay(50, token);
                             }
                         }

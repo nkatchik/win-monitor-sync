@@ -81,6 +81,14 @@ Reports and traces are in ignored `artifacts/debug`.
 - The attempted live Dell check stopped before changing any device values because a non-monitor output was selected. A separate production-app check verified no app window or overlay, volume/mute requests passing through to Windows, and the selected Steam Streaming Microphone endpoint remaining at 60%, unmuted. Its startup preference was restored afterward.
 - Live Dell volume-key testing without the overlay remains an interactive check. Earlier Dell write/readback results above still describe the unchanged volume engine; they do not establish whether a monitor displays its own OSD for DDC changes.
 
+### Tray sliders and wording, 12 September 2026
+
+- Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**. Nine new cases cover absolute volume/brightness requests, mixed slider/key input, coalesced drags, unchanged values, changed targets, and new input during volume confirmation without premature Windows gain changes.
+- The production tray menu showed **Volume 2%** and **Brightness 100%**, with the former Windows-gain suffix and vague brightness-key hint removed. Slider availability followed the selected audio route and cursor brightness support. Opening the menu preserved brightness and audio values.
+- The volume slider changed Dell volume **2 → 0 → 2** while Windows stayed at 100%. Native brightness-slider arrow input changed **100 → 95**; mouse dragging also produced confirmed DDC readback, and the slider restored brightness to **100**. No app volume or brightness overlay was created.
+- Mouse capture and arrow-key input kept the menu open. Availability updates hid the brightness control on simulated suspend and restored it on resume. The menu closed normally and stayed inside the monitor work area while rows changed. The 150%-DPI native-control layout and bounds were inspected. Traces and render captures are under ignored `artifacts/debug`.
+- Cross-monitor movement, mixed DPI, screen-reader navigation, and physical monitor OSD behavior remain interactive acceptance items. Tests sent messages to the native trackbar control; no global key injection or audio-route switch was performed.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -91,6 +99,7 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Windows volume change with the app exited | Establish whether monitor OSD already follows it; if it does, investigate existing hardware integration before adding duplicate control |
 | Launch with unequal values | Confirm the lower monitor setting before restoring Windows to 100%; if Windows is already 100%, preserve live monitor volume |
 | Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app creates no volume overlay; confirmed volume appears in tray status |
+| Tray sliders | Available controls appear with plain percentage labels; dragging/arrow keys adjust the intended monitor, the menu stays open, and opening/refreshing causes no writes |
 | Quick Settings | A new endpoint percentage is applied to hardware and Windows returns to 100% after confirmation; no reset feedback loop |
 | Drag slider and hold volume key | Values make progress during continuous input; no feedback oscillation or late rollback |
 | Dell volume buttons | Tray monitor level follows within approximately five seconds while Windows stays at 100% |

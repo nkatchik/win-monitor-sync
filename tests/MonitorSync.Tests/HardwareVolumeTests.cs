@@ -4,6 +4,36 @@ static class HardwareVolumeTests
 {
     public static readonly (string Name, Func<Task> Run)[] Cases =
     [
+        ("Volume slider input coalesces to the latest absolute level", async () =>
+        {
+            var f = new Fixture(); await f.Start();
+            f.Engine.SetPercent(20); await f.Tick(50); f.Engine.SetPercent(30); await f.Tick(100);
+            Equal(1, f.Monitor.Writes.Count); Equal(30u, f.Monitor.Current);
+            await f.Tick(300); Equal(30, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
+        }),
+        ("Volume keys continue from pending slider input", async () =>
+        {
+            var f = new Fixture(); await f.Start(); f.Engine.SetPercent(25); f.Engine.Step(2);
+            await f.Tick(100); await f.Tick(300); Equal(27, f.Engine.MonitorPercent);
+        }),
+        ("A newer slider request invalidates in-flight volume confirmation", async () =>
+        {
+            var f = new Fixture(60); await f.Start(); f.Engine.SetPercent(25); await f.Tick(100);
+            f.Monitor.OnRead = () => { f.Engine.SetPercent(15); return Task.CompletedTask; };
+            await f.Tick(300); f.Monitor.OnRead = null; Equal(60, f.Audio.Percent);
+            await f.Tick(400); Equal(60, f.Audio.Percent); await f.Tick(600);
+            Equal(15, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
+        }),
+        ("Setting an unchanged volume slider does not write", async () =>
+        {
+            var f = new Fixture(); await f.Start(); f.Engine.SetPercent(40); await f.Tick(1000);
+            Equal(0, f.Monitor.Writes.Count); Equal(false, f.Engine.IsPending);
+        }),
+        ("A route change rejects pending volume slider input", async () =>
+        {
+            var f = new Fixture(); await f.Start(); f.Engine.SetPercent(20); f.Audio.Active = false;
+            await Throws<IOException>(() => f.Tick(100)); Equal(0, f.Monitor.Writes.Count);
+        }),
         ("Hardware mode preserves live monitor volume when Windows is already 100", async () =>
         {
             var f = new Fixture(); await f.Start(); await f.Tick(0);

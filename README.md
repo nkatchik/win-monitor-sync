@@ -7,15 +7,16 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. HDMI ch
 ## Preview behavior
 
 - Volume keys adjust the monitor by 2%. The app shows no volume overlay; the monitor may show its own OSD. The selected monitor's Windows endpoint stays at **100%** during normal operation.
+- The tray menu includes **Volume XX%** and **Brightness XX%** sliders for currently available controls. Volume targets the selected monitor speakers; brightness targets the screen under the cursor. Opening the menu reads live levels without changing them. Dragging or using arrow keys adjusts the level without closing the menu.
 - Monitor-button changes are checked every five seconds and update the tray's displayed level. Windows remains at 100%.
 - Control starts automatically from live readings. If Windows is below 100%, the app confirms a write at the lower current percentage before raising Windows to 100%. This removes one attenuation stage and can change perceived loudness. Saved volume levels are never restored.
 - Rapid input is coalesced and writes are read back. Failed reads get up to three attempts, 500 ms apart. A failed connection retries after one second; unsupported-monitor discovery repeats every two seconds.
 - Quick Settings and other endpoint writes below 100% are treated as absolute monitor-volume requests. Windows returns to 100% only after DDC readback matches the requested monitor setting; a successful write return alone is insufficient. The native slider therefore does not display the monitor level; use the volume keys and check the monitor OSD or tray status.
 - Volume follows the currently selected Windows playback output when it is a supported monitor. Switching to headphones suspends monitor control; returning to monitor speakers resumes it. Cursor position does not select the audio target.
 - The mute key toggles Windows endpoint mute; volume adjustment preserves it and individual application volumes. Monitor hardware mute is not synchronized.
-- The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows sync status and an **Exit** action.
-- Your keyboard's **screen-brightness up/down keys** adjust brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold a key to keep adjusting. **Ctrl+Alt+Page Up / Page Down** remains available as a fallback.
-- A temporary brightness indicator appears at the bottom centre of that screen, follows the Windows light/dark theme, and fades away without taking focus. The displayed percentage comes from monitor readback.
+- The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows status and an **Exit** action. When a non-monitor output is selected, the status reads **No monitor speakers selected** and the volume slider is hidden. The tray does not display Windows gain.
+- Keyboard **brightness keys (usually marked with sun icons)** adjust brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold a key to keep adjusting. **Ctrl+Alt+Page Up / Page Down** remains available as a fallback; the tray slider works without special keys.
+- Keyboard brightness changes show a temporary indicator at the bottom centre of that screen. It follows the Windows light/dark theme and fades without taking focus. Tray slider adjustments use the menu itself for feedback, without an extra overlay.
 - There is no settings window, pairing step, or pause switch. Brightness bypasses the native Windows slider; the indicator is provided by this app.
 
 If the cursor's screen cannot be identified unambiguously or controlled through DDC/CI, brightness changes nothing. It never falls back to another screen. Moving the cursor alone does not change brightness; crossing screens discards pending work for the old target. Each new key burst starts with a fresh hardware reading, including changes made using the monitor's own buttons.
@@ -28,9 +29,9 @@ Magic Keyboard/Boot Camp support depends on the driver exposing one of those rep
 
 1. Enable **DDC/CI** in the Dell's on-screen menu. Start with a direct HDMI connection and select the Dell speakers as the default Windows playback output.
 2. Set both volumes to comfortable levels. Extract the complete preview ZIP into a folder and run `MonitorSync.exe`; keep the worker and runtime files together.
-3. Sync starts in the tray without opening a window. Right-click its icon to check the status or change **Start with Windows**.
-4. Try volume keys, then the Dell's volume buttons. The tray shows monitor volume while Windows stays at 100%; allow up to five seconds for monitor-button changes to appear in tray status.
-5. Move the pointer onto the screen you want to adjust and press its **brightness up/down media keys**. Standard HID display-brightness keys are supported; keyboard-backlight keys are different. Fn keys handled entirely by firmware or vendor software may not reach the app. The fallback is **Ctrl+Alt+Page Up / Page Down**, also shown in the tray hint's tooltip.
+3. Sync starts in the tray without opening a window. Right-click its icon to use the available sliders, check status, or change **Start with Windows**.
+4. Try the **Volume** slider or volume keys, then the Dell's volume buttons. The tray shows monitor volume while Windows stays at 100%; allow up to five seconds for monitor-button changes to appear in the menu.
+5. Use the **Brightness** slider on the screen you want to adjust. Alternatively, move the pointer onto that screen and use the keyboard's brightness keys (sun icons) or **Ctrl+Alt+Page Up / Page Down**. Keyboard-backlight keys are different, and Fn keys consumed by firmware or vendor software may not reach the app.
 
 Use **Exit** in the tray to stop the app. It leaves current volumes in place and starts syncing again on the next launch. Turning off **Start with Windows** is remembered across launches and upgrades; it does not stop the current session. Old saved pairing and pause settings are no longer used.
 

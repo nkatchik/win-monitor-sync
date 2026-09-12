@@ -41,6 +41,14 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
         if (desired != _desired) Queue(desired);
     }
 
+    public void SetPercent(int percent)
+    {
+        if (!_started) throw new InvalidOperationException("Read the monitor before accepting volume input.");
+        ArgumentOutOfRangeException.ThrowIfLessThan(percent, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(percent, 100);
+        if (percent != _desired) Queue(percent);
+    }
+
     public async Task TickAsync(CancellationToken token)
     {
         if (!_started) throw new InvalidOperationException("Start before ticking.");

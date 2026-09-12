@@ -13,7 +13,7 @@ No custom driver will be developed. Use an ordinary application and the existing
 - Initial hardware: Dell S2725QS over HDMI, with DisplayPort available for testing. Audio over the selected video connection is the working assumption pending endpoint discovery.
 - Design the monitor transport for HDMI and DisplayPort; expand compatibility only when each complete connection path is verified.
 - Easy MSI installation with a verified publisher and a distribution strategy that avoids alarming security warnings.
-- No settings window. The tray contains status, a brightness shortcut reminder, **Start with Windows** (on by default), and **Exit**. Everything supported is always enabled; there is no pairing or pause configuration. Diagnostics remain available through the command line.
+- No settings window. The tray contains status, sliders for available volume/brightness controls, **Start with Windows** (on by default), and **Exit**. Everything supported is always enabled; there is no pairing or pause configuration. Diagnostics remain available through the command line.
 
 ## Which monitor to control
 
@@ -56,6 +56,14 @@ On discovery, read live values. If Windows already equals 100%, preserve current
 The keyboard hook performs no COM, DDC, waits, or UI operations. It only queues intent. Core Audio default-endpoint notifications immediately invalidate its eligibility on a route change; the controller and worker also check the actual default endpoint before device operations. During DDC failure or suspension, keys return to Windows. If the input hook cannot be installed, hardware volume control stays inactive. No headphone endpoint is pinned or assigned the monitor's volume.
 
 The volume engine coalesces requests over 100 ms and checks readback after 200 ms, with at most three confirmation reads. New key/slider input supersedes delayed writes and readback. Idle polls every five seconds update the app's hardware level without changing Windows gain. Cancellation, output changes, and feature-range changes invalidate the current connection.
+
+## Tray sliders
+
+The menu labels are **Volume XX%** and **Brightness XX%**. It does not show Windows gain or an instruction to use special brightness keys. With a non-monitor audio output, status is **No monitor speakers selected** and volume is hidden. Each slider appears only when the intended target has a valid reading and is controllable; brightness availability is independent of audio selection.
+
+The controls are native Windows Forms trackbars hosted inside the existing context menu, with accessible names, mouse dragging, and keyboard arrows. Clicking or dragging a slider keeps the menu open; ordinary menu dismissal and Exit remain available. Live readback supplies the initial value. During dragging the thumb and label show requested input, then settle to confirmed hardware readback, including quantization. Programmatic refresh never generates a volume or brightness request. [ToolStripControlHost](https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.toolstripcontrolhost?view=windowsdesktop-10.0)
+
+Opening the menu probes brightness without writing. While open, availability is checked frequently and idle brightness is refreshed every two seconds; background menu polling stops on close. A cursor-target change invalidates the old brightness row and queued work. Key input and absolute slider input share one brightness engine, preserving order and superseding stale probes/readback. Sliders create no additional overlay; the brightness indicator is reserved for keyboard adjustments. The volume slider uses the existing confirmation-before-Windows-100% guard.
 
 ## Direct brightness with a Windows-style indicator
 

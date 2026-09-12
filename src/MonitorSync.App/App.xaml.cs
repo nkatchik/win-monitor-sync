@@ -10,7 +10,8 @@ public partial class App : System.Windows.Application
 {
     private Mutex? _instance;
     private Forms.NotifyIcon? _tray;
-    private Forms.ToolStripMenuItem? _statusItem, _levelsItem, _startupItem;
+    private Forms.ToolStripMenuItem? _statusItem, _startupItem;
+    private TraySliders? _sliders;
     private SyncController? _controller;
     private DdcClient? _ddc;
     private BrightnessController? _brightness;
@@ -44,11 +45,11 @@ public partial class App : System.Windows.Application
         _instance = new Mutex(true, @"Local\MonitorSync.SingleInstance", out var created);
         if (!created) { Shutdown(); return; }
 
+        Forms.Application.EnableVisualStyles();
         _ddc = new DdcClient();
         _controller = new SyncController(_ddc);
         _brightness = new BrightnessController(_ddc);
         _statusItem = new Forms.ToolStripMenuItem { Enabled = false };
-        _levelsItem = new Forms.ToolStripMenuItem { Enabled = false };
         _startupItem = new Forms.ToolStripMenuItem("Start with Windows");
         try { SettingsStore.InitializeStartup(); }
         catch (Exception error) { SettingsStore.Log(error.ToString()); }
@@ -61,10 +62,9 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new Forms.ContextMenuStrip();
-        var brightnessHint = new Forms.ToolStripMenuItem("Brightness: use your screen-brightness keys")
-        { Enabled = false, ToolTipText = "Fallback: Ctrl+Alt+Page Up / Page Down" };
-        menu.Items.AddRange([_statusItem, _levelsItem, brightnessHint, new Forms.ToolStripSeparator(),
+        menu.Items.AddRange([_statusItem, new Forms.ToolStripSeparator(),
             _startupItem, new Forms.ToolStripSeparator()]);
+        _sliders = new TraySliders(menu, _controller, _brightness);
         menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
         menu.Opening += (_, _) => UpdateStartupItem();
         _tray = new Forms.NotifyIcon
@@ -82,7 +82,6 @@ public partial class App : System.Windows.Application
         }
         catch (Exception error)
         {
-            brightnessHint.Text = "Brightness: Ctrl+Alt+Page Up / Page Down";
             SettingsStore.Log(error.ToString());
         }
         try
@@ -92,8 +91,6 @@ public partial class App : System.Windows.Application
         }
         catch (Exception error)
         {
-            if (_brightnessMediaKeys is null) brightnessHint.Text = "Brightness keys unavailable";
-            brightnessHint.ToolTipText = "Fallback shortcuts unavailable (already in use)";
             SettingsStore.Log(error.ToString());
         }
         UpdateStatus();
@@ -111,10 +108,8 @@ public partial class App : System.Windows.Application
 
     private void UpdateStatus()
     {
-        if (_controller is null || _tray is null || _statusItem is null || _levelsItem is null) return;
+        if (_controller is null || _tray is null || _statusItem is null) return;
         _statusItem.Text = _controller.Status;
-        _levelsItem.Text = _controller.Levels;
-        _levelsItem.Visible = _controller.Levels.Length > 0;
         var tooltip = "Monitor Sync — " + _controller.Status;
         _tray.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
     }
@@ -140,6 +135,7 @@ public partial class App : System.Windows.Application
     {
         if (_exiting) return;
         _exiting = true;
+        _sliders?.Dispose();
         _brightnessMediaKeys?.Dispose();
         _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
@@ -152,6 +148,7 @@ public partial class App : System.Windows.Application
     {
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
+        _sliders?.Dispose();
         _brightnessMediaKeys?.Dispose();
         _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();

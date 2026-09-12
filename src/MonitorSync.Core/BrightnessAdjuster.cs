@@ -5,7 +5,7 @@ public sealed class MonitorTargetChangedException() : Exception("The monitor con
 /// <summary>A single brightness key burst, based on a fresh hardware reading.</summary>
 public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTargetCurrent, Func<long> milliseconds)
 {
-    private readonly List<int> _initialSteps = [];
+    private readonly List<(int Value, bool Absolute)> _initialInput = [];
     private VolumeReading _confirmed;
     private bool _started, _dirty;
     private int _desired, _confirmationReads;
@@ -19,8 +19,20 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
     public void Step(int delta)
     {
         if (delta is not (-5 or 5)) throw new ArgumentOutOfRangeException(nameof(delta));
-        if (!_started) { _initialSteps.Add(delta); return; }
-        var desired = Math.Clamp(_desired + delta, 0, 100);
+        if (!_started) { _initialInput.Add((delta, false)); return; }
+        Queue(Math.Clamp(_desired + delta, 0, 100));
+    }
+
+    public void SetPercent(int percent)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(percent, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(percent, 100);
+        if (!_started) { _initialInput.Add((percent, true)); return; }
+        Queue(percent);
+    }
+
+    private void Queue(int desired)
+    {
         if (desired == _desired) return;
         _desired = desired;
         if (!_dirty) _writeDue = milliseconds() + 100;
@@ -37,8 +49,9 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
         reading.Validate();
         _confirmed = reading;
         _desired = reading.Percent;
-        foreach (var delta in _initialSteps) _desired = Math.Clamp(_desired + delta, 0, 100);
-        _initialSteps.Clear();
+        foreach (var (value, absolute) in _initialInput)
+            _desired = absolute ? value : Math.Clamp(_desired + value, 0, 100);
+        _initialInput.Clear();
         _started = true;
         _dirty = reading.RawFor(_desired) != reading.Current;
         _writeDue = milliseconds() + 100;

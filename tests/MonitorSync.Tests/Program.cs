@@ -2,6 +2,30 @@ using MonitorSync.Core;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Brightness sliders and keys preserve input order during the initial read", async () =>
+    {
+        var f = new BrightnessFixture(); f.Engine.Step(5); f.Engine.SetPercent(70);
+        f.Monitor.OnRead = () => { f.Engine.Step(-5); return Task.CompletedTask; };
+        await f.Start(); f.Monitor.OnRead = null; await f.Tick(100); await f.Tick(300);
+        Equal(65, f.Engine.Percent); Equal(1, f.Monitor.Writes.Count);
+    }),
+    ("Brightness slider drags coalesce to the latest absolute level", async () =>
+    {
+        var f = new BrightnessFixture(); await f.Start();
+        f.Engine.SetPercent(20); await f.Tick(50); f.Engine.SetPercent(30); await f.Tick(100);
+        Equal(1, f.Monitor.Writes.Count); Equal(30u, f.Monitor.Current);
+        await f.Tick(300); Equal(30, f.Engine.Percent);
+    }),
+    ("Moving screens rejects a queued brightness slider write", async () =>
+    {
+        var f = new BrightnessFixture(); await f.Start(); f.Engine.SetPercent(20); f.TargetCurrent = false;
+        await Throws<MonitorTargetChangedException>(() => f.Tick(100)); Equal(0, f.Monitor.Writes.Count);
+    }),
+    ("An unchanged brightness slider does not write", async () =>
+    {
+        var f = new BrightnessFixture(); await f.Start(); f.Engine.SetPercent(40); await f.Tick(1000);
+        Equal(false, f.Engine.IsPending); Equal(0, f.Monitor.Writes.Count);
+    }),
     ("Brightness media keys step on press and stop on release", () =>
     {
         long now = 0; var keys = new BrightnessKeyRepeater(() => now);
