@@ -21,7 +21,7 @@ public sealed class SyncController : IDisposable
     public event EventHandler? Changed;
     public string Status => _status;
     public string Levels => _levels;
-    public bool CanControlVolume => !_suspended && _connection?.IsCancellationRequested == false &&
+    public bool CanControlVolume => !_disposed && !_lifetime.IsCancellationRequested && !_suspended && _connection?.IsCancellationRequested == false &&
         _audio?.IsCurrentRoute == true && _engine is not null;
     public int? VolumePercent => CanControlVolume ? _engine!.MonitorPercent : null;
     public bool IsPending => CanControlVolume && _engine!.IsPending;

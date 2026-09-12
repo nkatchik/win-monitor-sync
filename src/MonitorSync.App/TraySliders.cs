@@ -7,8 +7,8 @@ namespace MonitorSync.App;
 public sealed class TraySliders : IDisposable
 {
     private readonly Forms.ContextMenuStrip _menu;
-    private readonly SyncController _volume;
-    private readonly BrightnessController _brightness;
+    private SyncController? _volume;
+    private BrightnessController? _brightness;
     private readonly TraySlider _volumeSlider = new("Volume", 2);
     private readonly TraySlider _brightnessSlider = new("Brightness", 5);
     private readonly Forms.Timer _refresh = new() { Interval = 100 };
@@ -16,21 +16,31 @@ public sealed class TraySliders : IDisposable
     private bool _probing, _disposed;
     private long _probeDue;
 
-    public TraySliders(Forms.ContextMenuStrip menu, SyncController volume, BrightnessController brightness)
+    public TraySliders(Forms.ContextMenuStrip menu)
     {
         _menu = menu;
-        _volume = volume;
-        _brightness = brightness;
-        menu.Items.Insert(1, _volumeSlider);
-        menu.Items.Insert(2, _brightnessSlider);
-        _volumeSlider.ValueRequested += percent => { _volume.SetVolumePercent(percent); Update(); };
-        _brightnessSlider.ValueRequested += percent => { _brightness.SetPercent(percent); Update(); };
+        menu.Items.Insert(0, _volumeSlider);
+        menu.Items.Insert(1, _brightnessSlider);
+        _volumeSlider.ValueRequested += percent => { _volume?.SetVolumePercent(percent); Update(); };
+        _brightnessSlider.ValueRequested += percent => { _brightness?.SetPercent(percent); Update(); };
         menu.Opened += Opened;
         menu.Closed += Closed;
         menu.Closing += Closing;
-        volume.Changed += Changed;
-        brightness.Changed += Changed;
         _refresh.Tick += Tick;
+    }
+
+    public void SetControllers(SyncController? volume, BrightnessController? brightness)
+    {
+        if (_disposed) return;
+        _refresh.Stop();
+        if (_volume is not null) _volume.Changed -= Changed;
+        if (_brightness is not null) _brightness.Changed -= Changed;
+        _volume = volume;
+        _brightness = brightness;
+        if (_volume is not null) _volume.Changed += Changed;
+        if (_brightness is not null) _brightness.Changed += Changed;
+        Update();
+        if (_menu.Visible) Opened(this, EventArgs.Empty);
     }
 
     private void Opened(object? sender, EventArgs e)
@@ -39,8 +49,11 @@ public sealed class TraySliders : IDisposable
         _volumeSlider.MatchMenu(_menu);
         _brightnessSlider.MatchMenu(_menu);
         Update();
-        _refresh.Start();
-        Tick(sender, e);
+        if (_brightness is not null)
+        {
+            _refresh.Start();
+            Tick(sender, e);
+        }
     }
 
     private void Closed(object? sender, Forms.ToolStripDropDownClosedEventArgs e) => _refresh.Stop();
@@ -56,11 +69,11 @@ public sealed class TraySliders : IDisposable
 
     private async void Tick(object? sender, EventArgs e)
     {
-        if (_disposed || !_menu.Visible) return;
+        if (_disposed || !_menu.Visible || _brightness is not { } brightness) return;
         Update();
         if (_probing || _clock.ElapsedMilliseconds < _probeDue) return;
         _probing = true;
-        try { await _brightness.RefreshAsync(); }
+        try { await brightness.RefreshAsync(); }
         finally
         {
             _probing = false;
@@ -72,10 +85,10 @@ public sealed class TraySliders : IDisposable
     private void Update()
     {
         if (_disposed) return;
-        _volumeSlider.UpdateLevel(_volume.VolumePercent, _volume.IsPending);
-        _brightnessSlider.UpdateLevel(_brightness.Percent, _brightness.IsPending);
+        _volumeSlider.UpdateLevel(_volume?.VolumePercent, _volume?.IsPending ?? false);
+        _brightnessSlider.UpdateLevel(_brightness?.Percent, _brightness?.IsPending ?? false);
         if (!_menu.Visible) return;
-        // As async discovery adds/removes rows, keep the popup in its current screen's work area.
+        // Keep the popup in its current screen's work area as live levels update.
         var area = Forms.Screen.FromControl(_menu).WorkingArea;
         var location = new Point(Math.Clamp(_menu.Left, area.Left, Math.Max(area.Left, area.Right - _menu.Width)),
             Math.Clamp(_menu.Top, area.Top, Math.Max(area.Top, area.Bottom - _menu.Height)));
@@ -91,8 +104,8 @@ public sealed class TraySliders : IDisposable
         _menu.Opened -= Opened;
         _menu.Closed -= Closed;
         _menu.Closing -= Closing;
-        _volume.Changed -= Changed;
-        _brightness.Changed -= Changed;
+        if (_volume is not null) _volume.Changed -= Changed;
+        if (_brightness is not null) _brightness.Changed -= Changed;
         // The menu owns and disposes the hosted controls.
     }
 }

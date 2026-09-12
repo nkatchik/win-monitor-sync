@@ -10,6 +10,7 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private Session? _session;
     private Task _pump = Task.CompletedTask;
+    private Task _refreshTask = Task.CompletedTask;
     private BrightnessFlyout? _flyout;
     private (CursorDisplay Target, int Percent)? _reading;
     private long _revision;
@@ -21,7 +22,13 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     public bool IsPending => _session is not null;
 
     // Tray discovery is read-only and never replaces a newer key/slider request.
-    public async Task RefreshAsync()
+    public Task RefreshAsync()
+    {
+        if (_disposed || _suspended || _session is not null || !_refreshTask.IsCompleted) return _refreshTask;
+        return _refreshTask = RefreshCoreAsync();
+    }
+
+    private async Task RefreshCoreAsync()
     {
         if (_disposed || _suspended || _session is not null) return;
         var target = CursorDisplay.Capture();
@@ -151,7 +158,7 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
         if (_disposed) return;
         _lifetime.Cancel();
         Invalidate();
-        await _pump;
+        await Task.WhenAll(_pump, _refreshTask);
         Dispose();
     }
 

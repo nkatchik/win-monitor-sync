@@ -8,6 +8,21 @@ public static class SettingsStore
     public static readonly string DirectoryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSync");
     private static readonly object LogGate = new();
+
+    public static bool Active
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\MonitorSync");
+            return key?.GetValue("Active") is not int value || value != 0;
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(@"Software\MonitorSync");
+            key.SetValue("Active", value ? 1 : 0, RegistryValueKind.DWord);
+        }
+    }
+
     public static void InitializeStartup()
     {
         using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");

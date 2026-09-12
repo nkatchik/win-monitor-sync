@@ -1,6 +1,6 @@
 # Monitor Sync for Windows 11
 
-Design and implementation status, 12 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. Its only setting is **Start with Windows**, enabled by default. Brightness uses a temporary Windows-style indicator; the app has no volume overlay. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 13 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. **Active** and **Start with Windows** default to on and are remembered independently. Brightness uses a temporary Windows-style indicator; the app has no volume overlay. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
 No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Volume keys control monitor gain while the selected monitor endpoint stays at 100%. Brightness bypasses Windows brightness integration, as requested, and controls the monitor directly.
 
@@ -13,7 +13,7 @@ No custom driver will be developed. Use an ordinary application and the existing
 - Initial hardware: Dell S2725QS over HDMI, with DisplayPort available for testing. Audio over the selected video connection is the working assumption pending endpoint discovery.
 - Design the monitor transport for HDMI and DisplayPort; expand compatibility only when each complete connection path is verified.
 - Easy MSI installation with a verified publisher and a distribution strategy that avoids alarming security warnings.
-- No settings window. The tray contains status, sliders for available volume/brightness controls, **Start with Windows** (on by default), and **Exit**. Everything supported is always enabled; there is no pairing or pause configuration. Diagnostics remain available through the command line.
+- No settings window. The tray contains volume and brightness sliders, **Active**, **Start with Windows**, and **Exit**. Unavailable or inactive sliders remain visible and disabled, without a status row. Both checkboxes default to on. Diagnostics remain available through the command line.
 
 ## Which monitor to control
 
@@ -30,7 +30,7 @@ Volume follows this policy through the current default-endpoint and monitor-matc
 | Area | Evidence | Design consequence |
 | --- | --- | --- |
 | Hardware brightness and volume | Windows has DDC/CI APIs; the Dell manual documents DDC/CI and monitor controls | Probe actual feature support and readback over each connection |
-| Windows endpoint gain | The native slider and endpoint gain represent the same value | Keep gain at 100%; display monitor volume in tray status |
+| Windows endpoint gain | The native slider and endpoint gain represent the same value | Keep gain at 100%; display monitor volume in the tray slider |
 | Native Windows brightness | This desktop exposes no supported WMI brightness control | Bypass it with direct DDC shortcuts and a Windows-style indicator |
 | MSI | Standard Windows Installer packaging is available | Bundle dependencies and support upgrade/uninstall |
 | Warning-free direct download | Signing alone does not guarantee SmartScreen reputation | Prefer a Store installation path; keep the signed MSI downloadable |
@@ -47,7 +47,7 @@ Support means the entire PC/GPU-driver/cable/adapter/monitor combination passes.
 
 ## Hardware volume with Windows at 100%
 
-The monitor's speaker-volume control is authoritative. Dedicated Windows volume keys (`VK_VOLUME_UP`, `VK_VOLUME_DOWN`, and `VK_VOLUME_MUTE`) are intercepted only for a successfully discovered monitor route. Up/down applies 2% steps through DDC; mute changes the Windows endpoint mute state. The app creates no volume overlay, leaving any on-screen volume feedback to the monitor itself. Confirmed volume remains available in tray status. Individual application/session volumes remain untouched.
+The monitor's speaker-volume control is authoritative. Dedicated Windows volume keys (`VK_VOLUME_UP`, `VK_VOLUME_DOWN`, and `VK_VOLUME_MUTE`) are intercepted only for a successfully discovered monitor route while active. Up/down applies 2% steps through DDC; mute changes the Windows endpoint mute state. The app creates no volume overlay, leaving any on-screen volume feedback to the monitor itself. Confirmed volume remains available in the tray slider. Individual application/session volumes remain untouched.
 
 The native Windows slider and its endpoint gain are the same control, so it cannot simultaneously show monitor volume and stay at 100%. The app shows confirmed monitor volume in the tray. An external endpoint change below 100% becomes an absolute monitor request; Windows returns to 100% only after confirmed DDC readback and a compare-before-set check against newer intent. A successful DDC write return alone is insufficient: the subsequent raw readback must equal the requested value on the same route and range. Failed, stale, or mismatched readback never raises Windows gain. No monitor-volume request is generated by that restoration. [Endpoint volume controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
@@ -59,11 +59,11 @@ The volume engine coalesces requests over 20 ms and checks readback after 200 ms
 
 ## Tray sliders
 
-The menu labels are **Volume XX%** and **Brightness XX%**. It does not show Windows gain or an instruction to use special brightness keys. With a non-monitor audio output, status is **No monitor speakers selected** and volume is hidden. Each slider appears only when the intended target has a valid reading and is controllable; brightness availability is independent of audio selection.
+The menu labels are **Volume XX%** and **Brightness XX%**. It does not show Windows gain, a status row, or an instruction to use special brightness keys. With a non-monitor audio output, the volume slider is disabled. Each slider stays visible and is enabled only when active and the intended target has a valid reading and is controllable; brightness availability is independent of audio selection. Disabled sliders show only their control name, without a stale percentage.
 
 The controls are native Windows Forms trackbars hosted inside the existing context menu, with accessible names, mouse dragging, and keyboard arrows. Clicking or dragging a slider keeps the menu open; ordinary menu dismissal and Exit remain available. Live readback supplies the initial value. During dragging the thumb and label show requested input, then settle to confirmed hardware readback, including quantization. Programmatic refresh never generates a volume or brightness request. [ToolStripControlHost](https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.toolstripcontrolhost?view=windowsdesktop-10.0)
 
-Opening the menu probes brightness without writing. While open, availability is checked frequently and idle brightness is refreshed every two seconds; background menu polling stops on close. A cursor-target change invalidates the old brightness row and queued work. Key input and absolute slider input share one brightness engine, preserving order and superseding stale probes/readback. Sliders create no additional overlay; the brightness indicator is reserved for keyboard adjustments. The volume slider uses the existing confirmation-before-Windows-100% guard.
+While active, opening the menu probes brightness without writing. While open, availability is checked frequently and idle brightness is refreshed every two seconds; background menu polling stops on close or when Active is unchecked. A cursor-target change invalidates the old brightness row and queued work. Key input and absolute slider input share one brightness engine, preserving order and superseding stale probes/readback. Sliders create no additional overlay; the brightness indicator is reserved for keyboard adjustments. The volume slider uses the existing confirmation-before-Windows-100% guard.
 
 ## Direct brightness with a Windows-style indicator
 
@@ -103,17 +103,19 @@ Synchronization rules:
 2. Normalize against verified feature ranges. Coalesce rapid requests to the newest value over 20 ms. Both control loops check pending work every 20 ms; scheduling and serialized DDC I/O add latency, so this is not a guarantee of 50 hardware updates per second.
 3. Read back after settling. Publish the value actually applied, including clamping, without confusing it with newer pending intent.
 4. Poll slowly when idle, initially about every five seconds. Failed or unconfirmed operations end the current connection; automatic discovery retries after one second. Readback is eventual, not instantaneous.
-5. Observed monitor changes update tray status without changing Windows gain or generating a new hardware command. Tag origin/revision to prevent feedback loops.
+5. Observed monitor changes update the tray slider without changing Windows gain or generating a new hardware command. Tag origin/revision to prevent feedback loops.
 6. Discard work from old connections. Re-enumerate after sleep, display changes, or audio-route changes.
 7. Mark unreadable or unavailable controls as such. Cached values must not be presented as verified hardware state.
 
 ## Audio lifecycle and recovery
 
-Only manage the default playback endpoint when it is display audio with one matching monitor. Switching to headphones suspends monitor control. The app checks the playback route every two seconds while waiting, and rebuilds the connection after a route change. Initial connection and recovery adopt live monitor volume; when Windows is below 100%, a confirmed lower monitor setting precedes restoring Windows gain. No saved pairing or enabled/paused state is used.
+Only manage the default playback endpoint when active and when it is display audio with one matching monitor. Switching to headphones suspends monitor control. The app checks the playback route every two seconds while waiting, and rebuilds the connection after a route change. Initial connection and recovery adopt live monitor volume; when Windows is below 100%, a confirmed lower monitor setting precedes restoring Windows gain. No saved pairing or hardware level is used.
+
+The Active checkbox is stored as a per-user registry preference, independently of startup. Turning it off disconnects the tray controls, releases the volume hook, brightness HID registrations, repeat/discovery timers, and fallback shortcuts, cancels and drains volume/brightness work including tray probes, and terminates the DDC worker. It leaves current levels in place. An already-issued hardware command cannot be recalled. While inactive, opening the menu, display changes, and resume events do not restart monitoring. Re-enabling creates new controllers from live readings; it does not replay pending input. The sliders stay enabled during normal adjustment so continuous dragging remains possible.
 
 Preserve ordinary Windows mute behavior. Hardware mute, if separately offered, needs verified monitor-specific support. The initial volume mapping applies to ordinary shared-mode playback; exclusive-mode playback can bypass Windows software attenuation, changing the effective response. [Shared and exclusive audio controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
-If a DDC operation fails, keep Windows volume functional, show an unavailable status in the tray, and retry with a fresh connection. Sleep cancels outstanding work until resume. A single asynchronous loop owns connection discovery and sync, preventing overlapping reconnect operations. On exit or a crash, ordinary Windows audio continues because no audio stream is routed through our process. Do not restore stale values or force monitor volume to maximum during recovery.
+If a DDC operation fails, keep Windows volume functional, disable the affected tray slider, and retry with a fresh connection while active. Sleep cancels outstanding work until resume. A single asynchronous loop owns connection discovery and sync, preventing overlapping reconnect operations. On exit or a crash, ordinary Windows audio continues because no audio stream is routed through our process. Do not restore stale values or force monitor volume to maximum during recovery.
 
 ## Components and packaging
 

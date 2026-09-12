@@ -20,11 +20,11 @@ public sealed class TraySlider : Forms.ToolStripControlHost
         Size = _surface.Size;
         Margin = new Forms.Padding(0, 2, 0, 2);
         AccessibleName = name;
-        Visible = false;
+        Enabled = false;
         _surface.SizeChanged += (_, _) => Size = _surface.Size;
         _surface.Slider.ValueChanged += (_, _) =>
         {
-            if (_updating || !Available) return;
+            if (_updating || !Enabled) return;
             _surface.Caption.Text = $"{_name} {_surface.Slider.Value}%";
             ValueRequested?.Invoke(_surface.Slider.Value);
         };
@@ -32,8 +32,14 @@ public sealed class TraySlider : Forms.ToolStripControlHost
 
     public void UpdateLevel(int? percent, bool pending)
     {
-        Available = percent.HasValue;
-        if (percent is not int confirmed) { _hasValue = false; return; }
+        Enabled = percent.HasValue;
+        if (percent is not int confirmed)
+        {
+            _hasValue = false;
+            _surface.Slider.Capture = false;
+            _surface.Caption.Text = _name;
+            return;
+        }
         if ((_hasValue && pending) || _surface.Slider.Capture) return;
         _updating = true;
         try

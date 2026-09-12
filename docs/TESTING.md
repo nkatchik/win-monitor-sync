@@ -100,6 +100,13 @@ Reports and traces are in ignored `artifacts/debug`.
 - Left-click now opens the same tray menu as right-click and gives the popup focus. Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**.
 - Native tray mouse-up callbacks against the running app verified that each button opens the same menu once, Escape dismisses the left-click menu, and switching focus dismisses either menu. Left-click reopened correctly afterward. No slider values were changed; physical mouse clicks were not simulated globally.
 
+### Active checkbox and disabled sliders, 13 September 2026
+
+- Removed the menu status row and changing status tooltip. Both sliders remain visible; unavailable or inactive controls are disabled and show their name without a stale percentage. Active and Start with Windows default to on and are stored independently.
+- Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**. A separate Windows harness exercised the production tray app with a saved inactive preference, enabling/disabling through the real checkbox handler, and native trackbar enablement.
+- Inactive startup and menu opening created no controllers, keyboard listeners, polling timer, or DDC worker. Disabling during queued volume and keyboard-brightness adjustments canceled both before writing, closed the brightness indicator, released the volume hook and HID listener, and made both fallback shortcuts available to another window. Windows output, gain, mute, and the Dell's volume/brightness readings were preserved.
+- The inactive app stayed stopped for six seconds with the menu open after simulated display-change and resume events. Re-enabling created fresh controllers and read current levels without replaying canceled input. Disabling also drained an in-flight read-only tray brightness probe. The harness restored the original startup and Active preferences. Trace: ignored `artifacts/debug/active-smoke.txt`.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -110,7 +117,8 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Windows volume change with the app exited | Establish whether monitor OSD already follows it; if it does, investigate existing hardware integration before adding duplicate control |
 | Launch with unequal values | Confirm the lower monitor setting before restoring Windows to 100%; if Windows is already 100%, preserve live monitor volume |
 | Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app creates no volume overlay; confirmed volume appears in tray status |
-| Tray sliders | Available controls appear with plain percentage labels; dragging/arrow keys adjust the intended monitor, the menu stays open, and opening/refreshing causes no writes |
+| Tray sliders | Both rows remain visible; available controls show percentages and unavailable controls are disabled; dragging/arrow keys adjust the intended monitor and keep the menu open |
+| Active checkbox | Turning off cancels pending work, releases shortcuts/hooks, stops the worker and polling, and preserves levels; saved inactivity survives launch and resume; re-enabling uses fresh readings |
 | Quick Settings | A new endpoint percentage is applied to hardware and Windows returns to 100% after confirmation; no reset feedback loop |
 | Drag slider and hold volume key | Values make progress during continuous input; no feedback oscillation or late rollback |
 | Dell volume buttons | Tray monitor level follows within approximately five seconds while Windows stays at 100% |
@@ -129,7 +137,7 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Selected audio monitor unavailable while another supports DDC | Neither that other monitor nor the Windows endpoint is changed by sync |
 | Worker/app termination | No audio interruption or forced volume reset; helper exits with its owner |
 | Brightness indicator | Resembles Windows in light/dark/high-contrast modes, remains readable at each DPI, takes no focus, and dismisses automatically |
-| High DPI, keyboard, screen reader | Tray status, startup checkbox, and Exit are usable; shortcut conflicts are reported; brightness announcements are usable |
+| High DPI, keyboard, screen reader | Sliders, Active, Start with Windows, and Exit are usable; disabled states are exposed; brightness announcements are usable |
 
 A successful DDC write reply is not sufficient: check the monitor's displayed value and audible/visible behavior. Measure the useful quiet-to-loud range before deciding whether a different mapping is needed. Exclusive-mode playback can have a different gain response from shared-mode playback.
 
