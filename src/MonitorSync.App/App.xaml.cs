@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private BrightnessController? _brightness;
     private BrightnessHotkeys? _brightnessHotkeys;
     private BrightnessMediaKeys? _brightnessMediaKeys;
+    private VolumeMediaKeys? _volumeMediaKeys;
     private bool _exiting;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -72,6 +73,8 @@ public partial class App : System.Windows.Application
             Text = "Monitor Sync", Visible = true, ContextMenuStrip = menu
         };
         _controller.Changed += (_, _) => UpdateStatus();
+        try { _volumeMediaKeys = new VolumeMediaKeys(_controller.TryQueueVolumeKey); }
+        catch (Exception error) { SettingsStore.Log(error.ToString()); }
         try
         {
             _brightnessMediaKeys = new BrightnessMediaKeys();
@@ -96,7 +99,7 @@ public partial class App : System.Windows.Application
         UpdateStatus();
         SystemEvents.DisplaySettingsChanged += DisplayChanged;
         SystemEvents.PowerModeChanged += PowerChanged;
-        _controller.Start();
+        _controller.Start(_volumeMediaKeys is not null);
     }
 
     private void UpdateStartupItem()
@@ -138,6 +141,7 @@ public partial class App : System.Windows.Application
         if (_exiting) return;
         _exiting = true;
         _brightnessMediaKeys?.Dispose();
+        _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         await Task.WhenAll(_brightness?.CloseAsync() ?? Task.CompletedTask,
             _controller?.CloseAsync() ?? Task.CompletedTask);
@@ -149,6 +153,7 @@ public partial class App : System.Windows.Application
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
         _brightnessMediaKeys?.Dispose();
+        _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         _brightness?.Dispose();
         _controller?.Dispose();

@@ -6,12 +6,16 @@ using System.Windows.Threading;
 using MonitorSync.Core;
 using MonitorSync.Windows;
 
+namespace MonitorSync.App;
+
 public sealed class BrightnessMediaKeys : IDisposable
 {
     private readonly HwndSource _source;
     private readonly Dictionary<IntPtr, HidBrightnessInput?> _devices = [];
     private readonly BrightnessKeyRepeater _keys;
     private readonly DispatcherTimer _repeat = new() { Interval = TimeSpan.FromMilliseconds(50) };
+    private readonly DispatcherTimer _discovery = new() { Interval = TimeSpan.FromSeconds(5) };
+    private readonly HashSet<(ushort Page, ushort Usage)> _registered = [];
     private bool _suspended, _disposed;
     public event Action<int>? Step;
 
@@ -22,20 +26,39 @@ public sealed class BrightnessMediaKeys : IDisposable
         _source = new HwndSource(new HwndSourceParameters("Monitor Sync brightness media keys")
         { ParentWindow = new IntPtr(-3), WindowStyle = 0, Width = 0, Height = 0 });
         _source.AddHook(HandleMessage);
-        // INPUTSINK | DEVNOTIFY: receive Consumer Control reports while other apps have focus.
-        if (!RegisterRawInputDevices([new() { Page = 0x0C, Usage = 1, Flags = 0x2100, Target = _source.Handle }],
-            1, (uint)Marshal.SizeOf<RawDevice>()))
+        try
         {
-            var error = Marshal.GetLastWin32Error();
-            _source.Dispose();
-            throw new Win32Exception(error, "Could not listen for brightness media keys.");
+            // PAGEONLY | INPUTSINK | DEVNOTIFY covers every TLC on the Consumer and Apple pages.
+            foreach (var page in new ushort[] { 0x0C, 0xFF00, 0xFF01, 0x00FF }) Register(page, 0);
+            DiscoverCollections();
         }
+        catch { Dispose(); throw; }
+        _discovery.Tick += (_, _) => { if (!_suspended) DiscoverCollections(); };
+        _discovery.Start();
         _repeat.Tick += (_, _) =>
         {
             if (_suspended || CursorDisplay.Capture() is null) { Reset(); return; }
             var step = _keys.Tick();
             if (step != 0) Step?.Invoke(step);
         };
+    }
+
+    private void DiscoverCollections()
+    {
+        // A receiver can put Consumer usages inside another top-level collection.
+        // Discover only collections whose descriptors actually declare brightness.
+        foreach (var info in HidBrightnessInput.DescribeDevices())
+            if (!_registered.Contains((info.Page, 0)) && info.Usage != 0) Register(info.Page, info.Usage);
+    }
+
+    private void Register(ushort page, ushort usage)
+    {
+        if (_registered.Contains((page, usage))) return;
+        var flags = usage == 0 ? 0x2120u : 0x2100u;
+        if (!RegisterRawInputDevices([new() { Page = page, Usage = usage, Flags = flags, Target = _source.Handle }],
+            1, (uint)Marshal.SizeOf<RawDevice>()))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not listen for brightness media keys.");
+        _registered.Add((page, usage));
     }
 
     private IntPtr HandleMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -77,6 +100,7 @@ public sealed class BrightnessMediaKeys : IDisposable
                 Marshal.Copy(IntPtr.Add(data, checked((int)(headerSize + 8 + index * size))), report, 0, report.Length);
                 if (input.Read(report) is not { } buttons) continue;
                 var step = _keys.Update(header.Device.ToInt64(), buttons.Id, buttons.Up, buttons.Down);
+                if (buttons.Pulse) _keys.Update(header.Device.ToInt64(), buttons.Id, false, false);
                 if (_keys.HasKeys) _repeat.Start(); else _repeat.Stop();
                 if (step != 0) Step?.Invoke(step);
             }
@@ -91,8 +115,11 @@ public sealed class BrightnessMediaKeys : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _repeat.Stop(); _keys.Clear();
-        RegisterRawInputDevices([new() { Page = 0x0C, Usage = 1, Flags = 1 }], 1, (uint)Marshal.SizeOf<RawDevice>());
+        _repeat.Stop(); _discovery.Stop(); _keys.Clear();
+        foreach (var (page, usage) in _registered)
+            RegisterRawInputDevices([new() { Page = page, Usage = usage, Flags = usage == 0 ? 0x21u : 1u }],
+                1, (uint)Marshal.SizeOf<RawDevice>());
+        _registered.Clear();
         foreach (var input in _devices.Values) input?.Dispose();
         _devices.Clear();
         _source.Dispose();

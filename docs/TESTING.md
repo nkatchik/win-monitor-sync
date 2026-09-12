@@ -62,6 +62,18 @@ Brightness and the startup registry entry were restored after the harness. Trace
 - Background Consumer Control registration and disposal cleanup passed. The successful integration trace is in ignored `artifacts/debug/brightness-media-smoke.log`.
 - Physical brightness-key delivery, OEM/Fn behavior, and interaction with native laptop-panel brightness remain unverified. The existing shortcut remains a fallback.
 
+### Hardware volume and expanded HID revision, 12 September 2026
+
+- The previous app log showed DDC invalid-command, checksum, and I²C transmission errors (`0xC0262589`, `0xC026258B`, `0xC0262582`). Each failure previously disconnected volume sync for ten seconds. Reads now retry up to three times, 500 ms apart; failed connections retry after one second. A reported failed write is checked by readback, never blindly repeated.
+- Debug build passed with zero warnings/errors; **53/53 deterministic tests passed**. The suite covers hardware gain at Windows 100%, confirmation before pinning, coalesced keys, mute, newer input during DDC I/O, delayed callback revisions, cancellation, output changes, failed readback, and quantization. The obsolete equal-percentage engine and its tests were replaced.
+- A temporary harness ran the production tray app and volume-key callback against the real Dell. Windows adopted **100%**, monitor volume followed **34 → 32 → 34**, mute toggled and restored, and native endpoint requests **30 → 34** reached hardware before Windows returned to 100%. Wrong-output writes were rejected inside the worker without changing the monitor or restarting the shared worker. Simulated suspend released volume keys; resume rediscovered the monitor.
+- The volume indicator displayed confirmed hardware volume, remained on the audio monitor without taking focus, and dismissed automatically. Its 150%-scale dark rendering was inspected. No window appeared at startup; only **Start with Windows** and **Exit** remained interactive in the tray. Test cleanup restored the original Windows/monitor volumes and mute.
+- Terminating the actual DDC worker during idle control caused automatic worker recreation and live rediscovery. Windows remained at 100% and the Dell retained 34%; no stale volume was restored.
+- Native HID report tests passed against three connected Consumer descriptors, including brightness up/down/release, unrelated volume/backlight usages, and malformed lengths. Page-wide Raw Input registration and cleanup passed. Apple Vendor Keyboard and Top Case usage mappings, including the Apple vendor-ID restriction, are covered by deterministic tests.
+- No Apple keyboard was connected. Physical Magic Keyboard USB/Bluetooth, Boot Camp translations, scalar/relative HID fields on real keyboards, actual volume-key delivery, headphone switching, and long-duration DDC reliability remain interactive acceptance items. The volume test invoked the installed hook's callback directly; it did not inject or physically press a key.
+
+Reports and traces are in ignored `artifacts/debug`.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -70,14 +82,15 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | --- | --- |
 | Command-line diagnostics | Reports live Windows and monitor values; changes neither values nor startup preference |
 | Windows volume change with the app exited | Establish whether monitor OSD already follows it; if it does, investigate existing hardware integration before adding duplicate control |
-| Launch with unequal values | Sync starts automatically and both align to the lower current value; neither is forced to 100% |
-| Quick Settings and media keys | Monitor follows the latest Windows volume; native slider remains at the confirmed normalized monitor percentage |
+| Launch with unequal values | Confirm the lower monitor setting before restoring Windows to 100%; if Windows is already 100%, preserve live monitor volume |
+| Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app indicator shows confirmed hardware volume |
+| Quick Settings | A new endpoint percentage is applied to hardware and Windows returns to 100% after confirmation; no reset feedback loop |
 | Drag slider and hold volume key | Values make progress during continuous input; no feedback oscillation or late rollback |
-| Dell volume buttons | Windows follows within approximately five seconds while idle |
+| Dell volume buttons | Tray monitor level follows within approximately five seconds while Windows stays at 100% |
 | Windows mute | Remains muted through monitor-volume updates; unmute still works normally |
 | Per-app volume | Individual app settings remain unchanged |
 | Switch to headphones | Monitor sync suspends; headphone level is not copied from the Dell |
-| Switch back | Monitor is rediscovered automatically and sync resumes from the lower current value |
+| Switch back | Monitor is rediscovered automatically; Windows returns to 100% only after adoption succeeds |
 | Exit | No further sync writes; normal Windows playback continues |
 | Sleep / wake / cable reconnect | Pending operations are canceled; live handles are recreated; stale requests do not alter a new output |
 | Different input / port | New endpoint and monitor are discovered automatically when descriptions match uniquely |

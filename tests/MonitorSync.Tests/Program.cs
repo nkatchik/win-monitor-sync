@@ -193,131 +193,6 @@ var tests = new (string Name, Func<Task> Run)[]
         Equal(dell, AutomaticMonitorSelection.Find("DELL S2725QS", true, [other, dell]));
         return Task.CompletedTask;
     }),
-    ("Startup lowers Windows instead of raising the monitor", async () =>
-    {
-        var f = new Fixture(80, 40); await f.Start();
-        Equal(40, f.Audio.Percent); Equal(0, f.Monitor.Writes.Count);
-    }),
-    ("Startup lowers the monitor instead of raising Windows", async () =>
-    {
-        var f = new Fixture(20, 60); await f.Start(); await f.Tick(0); await f.Tick(200);
-        Equal(20, f.Audio.Percent); Equal(20u, f.Monitor.Current); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Startup at equal levels does not write", async () =>
-    {
-        var f = new Fixture(); await f.Start(); await f.Tick(0);
-        Equal(0, f.Monitor.Writes.Count); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Windows change is coalesced then confirmed", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Audio.UserSet(65);
-        await f.Tick(0); Equal(0, f.Monitor.Writes.Count);
-        await f.Tick(100); Equal(65u, f.Monitor.Current); Equal(true, f.Engine.IsPending);
-        await f.Tick(300); Equal(false, f.Engine.IsPending); Equal(65, f.Engine.MonitorPercent);
-    }),
-    ("Rapid slider changes send only the newest pending value", async () =>
-    {
-        var f = new Fixture(); await f.Start();
-        f.Audio.UserSet(50); await f.Tick(0); f.Audio.UserSet(70); await f.Tick(50);
-        f.Audio.UserSet(80); await f.Tick(100);
-        Equal(1, f.Monitor.Writes.Count); Equal(80u, f.Monitor.Writes[0]);
-    }),
-    ("Held media keys do not postpone the write deadline forever", async () =>
-    {
-        var f = new Fixture(); await f.Start();
-        for (var t = 0; t <= 100; t += 20) { f.Audio.UserSet(50 + t / 20); await f.Tick(t); }
-        Equal(1, f.Monitor.Writes.Count); Equal(55u, f.Monitor.Current);
-    }),
-    ("Physical monitor change updates Windows without an echo", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 25;
-        await f.Tick(5000); await f.Tick(5100); await f.Tick(10000);
-        Equal(25, f.Audio.Percent); Equal(1, f.Audio.Writes.Count); Equal(0, f.Monitor.Writes.Count);
-    }),
-    ("Windows mute survives a monitor-button update", async () =>
-    {
-        var f = new Fixture(); f.Audio.Muted = true; await f.Start();
-        f.Monitor.Current = 20; await f.Tick(5000); Equal(true, f.Audio.Muted);
-    }),
-    ("A delayed write response cannot undo newer Windows input", async () =>
-    {
-        var f = new Fixture(); await f.Start();
-        f.Audio.UserSet(60); await f.Tick(0);
-        f.Monitor.OnWrite = () => { f.Audio.UserSet(80); return Task.CompletedTask; };
-        await f.Tick(100); f.Monitor.OnWrite = null;
-        Equal(80, f.Audio.Percent); await f.Tick(200); await f.Tick(400);
-        Equal(80u, f.Monitor.Current); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("New input during confirmation supersedes old readback", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Audio.UserSet(60); await f.Tick(0); await f.Tick(100);
-        f.Monitor.OnRead = () => { f.Audio.UserSet(90); return Task.CompletedTask; };
-        await f.Tick(300); f.Monitor.OnRead = null; await f.Tick(400); await f.Tick(600);
-        Equal(90, f.Audio.Percent); Equal(90u, f.Monitor.Current); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("New input during idle polling wins over a monitor observation", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 20;
-        f.Monitor.OnRead = () => { f.Audio.UserSet(70); return Task.CompletedTask; };
-        await f.Tick(5000); f.Monitor.OnRead = null; await f.Tick(5100); await f.Tick(5300);
-        Equal(70, f.Audio.Percent); Equal(70u, f.Monitor.Current); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("A volume change away and back during polling is still detected", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 20;
-        f.Monitor.OnRead = () => { f.Audio.UserSet(70); f.Audio.UserSet(40); return Task.CompletedTask; };
-        await f.Tick(5000); Equal(40, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Delayed hardware settling does not roll Windows back", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.ApplyWrites = false;
-        f.Audio.UserSet(60); await f.Tick(0); await f.Tick(100); await f.Tick(300);
-        Equal(60, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
-        f.Monitor.Current = 60; await f.Tick(500); Equal(false, f.Engine.IsPending);
-    }),
-    ("Unconfirmed writes fail after bounded reads without resetting Windows", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.ApplyWrites = false;
-        f.Audio.UserSet(60); await f.Tick(0); await f.Tick(100); await f.Tick(300); await f.Tick(500);
-        await Throws<IOException>(() => f.Tick(700));
-        Equal(60, f.Audio.Percent); Equal(1, f.Monitor.Writes.Count); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Readback normalizes a monitor whose range is not 100", async () =>
-    {
-        var f = new Fixture(50, 6, 12); await f.Start(); f.Audio.UserSet(60);
-        await f.Tick(0); await f.Tick(100); await f.Tick(300); await f.Tick(500);
-        Equal(7u, f.Monitor.Current); Equal(58, f.Audio.Percent); Equal(1, f.Monitor.Writes.Count);
-    }),
-    ("Range changes invalidate the connection", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Maximum = 200;
-        await Throws<IOException>(() => f.Tick(5000)); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Cancellation after a monitor read prevents an audio write", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 20;
-        using var cts = new CancellationTokenSource();
-        f.Monitor.OnRead = () => { cts.Cancel(); return Task.CompletedTask; };
-        f.Now = 5000; await Throws<OperationCanceledException>(() => f.Engine.TickAsync(cts.Token));
-        Equal(40, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Switching output during a read prevents writes to the other device", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 20;
-        f.Monitor.OnRead = () => { f.Audio.Active = false; return Task.CompletedTask; };
-        await Throws<IOException>(() => f.Tick(5000)); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Compare-before-set preserves a last-moment external audio change", async () =>
-    {
-        var f = new Fixture(); await f.Start(); f.Monitor.Current = 20;
-        f.Audio.BeforeSet = () => f.Audio.UserSet(80);
-        await f.Tick(5000); Equal(80, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
-    }),
-    ("Disconnected audio rejects startup before any DDC operation", async () =>
-    {
-        var f = new Fixture(); f.Audio.Active = false;
-        await Throws<IOException>(f.Start); Equal(0, f.Monitor.Reads);
-    }),
     ("Invalid monitor ranges are rejected", () =>
     {
         ThrowsSync<IOException>(() => new VolumeReading(0, 0).Validate());
@@ -336,12 +211,13 @@ var tests = new (string Name, Func<Task> Run)[]
 };
 
 var failures = 0;
-foreach (var (name, run) in tests)
+var allTests = tests.Concat(HardwareVolumeTests.Cases).ToArray();
+foreach (var (name, run) in allTests)
 {
     try { await run(); Console.WriteLine($"PASS {name}"); }
     catch (Exception e) { failures++; Console.Error.WriteLine($"FAIL {name}: {e}"); }
 }
-Console.WriteLine($"{tests.Length - failures}/{tests.Length} tests passed.");
+Console.WriteLine($"{allTests.Length - failures}/{allTests.Length} tests passed.");
 return failures == 0 ? 0 : 1;
 
 static void Equal<T>(T expected, T actual)
@@ -358,17 +234,6 @@ static void ThrowsSync<T>(Action action) where T : Exception
 {
     try { action(); } catch (T) { return; }
     throw new Exception($"Expected {typeof(T).Name}.");
-}
-
-sealed class Fixture(int percent = 40, uint raw = 40, uint maximum = 100)
-{
-    public readonly FakeAudio Audio = new(percent);
-    public readonly FakeMonitor Monitor = new(raw, maximum);
-    public long Now;
-    private VolumeSynchronizer? _engine;
-    public VolumeSynchronizer Engine => _engine ??= new(Audio, Monitor, () => Now);
-    public Task Start() => Engine.StartAsync(CancellationToken.None);
-    public Task Tick(long milliseconds) { Now = milliseconds; return Engine.TickAsync(CancellationToken.None); }
 }
 
 sealed class BrightnessFixture(uint raw = 40, uint maximum = 100)
@@ -389,6 +254,7 @@ sealed class FakeAudio(int percent) : IAudioVolume
     public long Revision;
     public readonly List<int> Writes = [];
     public Action? BeforeSet;
+    public Action? AfterSet;
     public void UserSet(int value) { Percent = value; Revision++; }
     public AudioSnapshot Capture()
     {
@@ -399,7 +265,7 @@ sealed class FakeAudio(int percent) : IAudioVolume
     {
         BeforeSet?.Invoke();
         if (!Active || Capture() != expected) return false;
-        Percent = value; Writes.Add(value); return true;
+        Percent = value; Writes.Add(value); AfterSet?.Invoke(); return true;
     }
 }
 

@@ -12,6 +12,12 @@ public sealed class SyncController : IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _connection;
     private Task _runTask = Task.CompletedTask;
+    private HardwareVolumeController? _engine;
+    private AudioEndpoint? _audio;
+    private CursorDisplay? _display;
+    private BrightnessFlyout? _flyout;
+    private bool _showVolume;
+    private int _muteRequests;
     private bool _started, _suspended, _disposed;
     private string _status = "Finding monitor speakers…", _levels = "";
 
@@ -19,16 +25,26 @@ public sealed class SyncController : IDisposable
     public string Status => _status;
     public string Levels => _levels;
 
+    public bool TryQueueVolumeKey(int delta)
+    {
+        if (_suspended || _connection?.IsCancellationRequested != false || _audio?.IsCurrentRoute != true || _engine is null)
+            return false;
+        if (delta == 0) _muteRequests++; else _engine.Step(delta);
+        _showVolume = true;
+        return true;
+    }
+
     public SyncController(DdcClient? client = null)
     {
         _ddc = client ?? new DdcClient();
         _ownsDdc = client is null;
     }
 
-    public void Start()
+    public void Start(bool volumeKeysAvailable = true)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_started) return;
+        if (!volumeKeysAvailable) { SetStatus("Volume keys unavailable — using Windows volume"); return; }
         _started = true;
         _runTask = RunAsync(_lifetime.Token);
     }
@@ -64,22 +80,36 @@ public sealed class SyncController : IDisposable
                         if (monitor is null)
                         {
                             SetStatus("Waiting for a supported monitor — check DDC/CI");
-                            retryDelay = 10000;
+                            retryDelay = 2000;
                         }
                         else
                         {
                             using var audio = new AudioEndpoint(output.Id);
                             var clock = Stopwatch.StartNew();
-                            var engine = new VolumeSynchronizer(audio, new MonitorVolume(_ddc, monitor.Id),
+                            var engine = new HardwareVolumeController(audio, new MonitorVolume(_ddc, monitor.Id, output.Id),
                                 () => clock.ElapsedMilliseconds);
                             await engine.StartAsync(token);
+                            _audio = audio;
+                            _engine = engine;
+                            _display = CursorDisplay.FindById(monitor.Id);
                             while (true)
                             {
+                                if (_muteRequests > 0)
+                                {
+                                    if ((_muteRequests & 1) != 0) audio.TryToggleMute(audio.Capture());
+                                    _muteRequests = 0;
+                                }
                                 await engine.TickAsync(token);
                                 token.ThrowIfCancellationRequested();
-                                SetStatus(engine.IsPending ? "Syncing volume…" : "Volume sync is on",
-                                    $"Windows {engine.WindowsPercent}% · Monitor {engine.MonitorPercent}%");
-                                await Task.Delay(100, token);
+                                SetStatus(engine.IsPending ? "Adjusting monitor volume…" : "Monitor volume control is on",
+                                    $"Monitor {engine.MonitorPercent}%{(engine.Muted ? " · Muted" : "")} · Windows {engine.WindowsPercent}%");
+                                if (_showVolume && _display is not null)
+                                {
+                                    _flyout ??= new BrightnessFlyout(() => _audio?.IsCurrentRoute == true && !_suspended);
+                                    _flyout.ShowLevel(_display, engine.MonitorPercent, engine.IsPending, engine.Muted);
+                                    if (!engine.IsPending) _showVolume = false;
+                                }
+                                await Task.Delay(50, token);
                             }
                         }
                     }
@@ -94,11 +124,25 @@ public sealed class SyncController : IDisposable
             {
                 SetStatus("Checking playback output…");
             }
+            catch (MonitorTargetChangedException)
+            {
+                SetStatus("Checking playback output…");
+                retryDelay = 0;
+            }
             catch (Exception error)
             {
                 SetStatus("Monitor unavailable — retrying automatically");
                 SettingsStore.Log(error.ToString());
-                retryDelay = 10000;
+                retryDelay = 1000;
+            }
+            finally
+            {
+                _engine = null;
+                _audio = null;
+                _display = null;
+                _showVolume = false;
+                _muteRequests = 0;
+                _flyout?.HideImmediately();
             }
 
             try { await Task.Delay(retryDelay, token); }
@@ -136,6 +180,7 @@ public sealed class SyncController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
+        _flyout?.Close();
         if (_ownsDdc) _ddc.Dispose();
         _lifetime.Dispose();
     }
@@ -148,7 +193,7 @@ public sealed class SyncController : IDisposable
         var monitors = await client.ListAsync(token);
         return new { Version = BuildVersion, CapturedAt = DateTimeOffset.UtcNow,
             OS = Environment.OSVersion.VersionString, Architecture = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString(),
-            Audio = audio, Monitors = monitors,
+            Audio = audio, Monitors = monitors, BrightnessInputs = HidBrightnessInput.DescribeDevices(),
             Note = "Read-only report. DDC support/readback is not proof of successful hardware adjustment." };
     }
 }

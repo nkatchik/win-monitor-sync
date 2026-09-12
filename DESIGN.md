@@ -1,15 +1,15 @@
 # Monitor Sync for Windows 11
 
-Design and implementation status, 12 September 2026. The app runs in the tray with automatic equal-percentage volume sync and direct DDC brightness shortcuts. Its only setting is **Start with Windows**, enabled by default. Brightness uses a temporary Windows-style indicator. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 12 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. Its only setting is **Start with Windows**, enabled by default. Volume and brightness use temporary Windows-style indicators. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
-No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Volume uses native Windows controls. Brightness bypasses Windows brightness integration, as requested, and controls the monitor directly.
+No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Volume keys control monitor gain while the selected monitor endpoint stays at 100%. Brightness bypasses Windows brightness integration, as requested, and controls the monitor directly.
 
 ## Requirements
 
-- Windows Quick Settings volume controls monitor volume. Brightness media keys control the screen under the cursor and show a Windows-style indicator; fixed shortcuts remain a fallback.
-- Volume should feel like one control. Choose the tradeoff between equal Windows/monitor percentages and the combined volume curve; do not introduce a custom driver to bypass Windows attenuation.
+- Volume keys control monitor volume, with Windows at 100% and a Windows-style indicator. Brightness media keys control the screen under the cursor and show a Windows-style indicator; fixed shortcuts remain a fallback.
+- Monitor volume is authoritative. Raise Windows gain only after confirming control of the selected monitor; leave ordinary Windows volume functional when DDC is unavailable.
 - No custom audio or display driver, virtual audio routing, or audio-processing bridge.
-- Monitor-button volume changes flow back into Windows after readback. Brightness reads the current hardware value at the start of each key burst.
+- Monitor-button volume changes update the app after readback; Windows remains at 100%. Brightness reads the current hardware value at the start of each key burst.
 - Initial hardware: Dell S2725QS over HDMI, with DisplayPort available for testing. Audio over the selected video connection is the working assumption pending endpoint discovery.
 - Design the monitor transport for HDMI and DisplayPort; expand compatibility only when each complete connection path is verified.
 - Easy MSI installation with a verified publisher and a distribution strategy that avoids alarming security warnings.
@@ -30,7 +30,7 @@ Volume follows this policy through the current default-endpoint and monitor-matc
 | Area | Evidence | Design consequence |
 | --- | --- | --- |
 | Hardware brightness and volume | Windows has DDC/CI APIs; the Dell manual documents DDC/CI and monitor controls | Probe actual feature support and readback over each connection |
-| Native Windows volume | An ordinary app can observe endpoint changes and mirror them to DDC | Equal-value synchronization selected for the first preview |
+| Windows endpoint gain | The native slider and endpoint gain represent the same value | Keep gain at 100%; display monitor volume in the app indicator |
 | Native Windows brightness | This desktop exposes no supported WMI brightness control | Bypass it with direct DDC shortcuts and a Windows-style indicator |
 | MSI | Standard Windows Installer packaging is available | Bundle dependencies and support upgrade/uninstall |
 | Warning-free direct download | Signing alone does not guarantee SmartScreen reputation | Prefer a Store installation path; keep the signed MSI downloadable |
@@ -45,33 +45,17 @@ The manual also states that manual brightness/contrast adjustment is unavailable
 
 Support means the entire PC/GPU-driver/cable/adapter/monitor combination passes. Start with direct HDMI, repeat with direct DP, and later test docks and USB-C-to-DP paths. Merely changing the connector does not solve Windows' native-slider integration.
 
-## Native volume without a custom driver
+## Hardware volume with Windows at 100%
 
-An ordinary app can subscribe to Windows endpoint-volume changes, send corresponding values to the Dell using DDC/CI, and reflect monitor-button changes back into the Windows endpoint with feedback suppression. [Endpoint volume callbacks](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nn-endpointvolume-iaudioendpointvolumecallback)
+The monitor's speaker-volume control is authoritative. Dedicated Windows volume keys (`VK_VOLUME_UP`, `VK_VOLUME_DOWN`, and `VK_VOLUME_MUTE`) are intercepted only for a successfully discovered monitor route. Up/down applies 2% steps through DDC; mute changes the Windows endpoint mute state. A Windows-style indicator appears on the audio monitor, independently of cursor location. Individual application/session volumes remain untouched.
 
-First inspect endpoint hardware-volume support and verify whether Windows already operates the same monitor amplifier. If it does, do not apply that control a second time through DDC. The rest of this section assumes independent Windows and monitor volume stages. [Hardware support API](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nf-endpointvolume-iaudioendpointvolume-queryhardwaresupport)
+The native Windows slider and its endpoint gain are the same control, so it cannot simultaneously show monitor volume and stay at 100%. The app provides the indicator. An external endpoint change below 100% becomes an absolute monitor request; Windows returns to 100% only after confirmed DDC readback and a compare-before-set check against newer intent. No monitor-volume request is generated by that restoration. [Endpoint volume controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
-For independent stages, normalized signal amplitude is `G = W(s) * M(h)`, where `s` is the Windows slider fraction, `h` is the monitor setting fraction, and W/M are their actual gain curves. Attenuation in decibels adds. Per-application volume and monitor processing are held constant in this model.
+On discovery, read live values. If Windows already equals 100%, preserve current monitor volume. Otherwise write and confirm the lower current percentage before restoring Windows to 100%. Removing Windows attenuation can increase perceived loudness even though the monitor percentage stays the same or decreases. The monitor's gain curve is not calibrated, and no acoustic equivalence is claimed.
 
-Equal-value synchronization sets `h = s`. If both stages were linear in amplitude, the result would be `G = s²`: at two 50% settings, amplitude would be 25% of full scale. That is a quadratic amplitude curve, not a statement that sound is perceived as 25% as loud. Actual Windows percentages use a nonlinear audio-tapered curve, and the Dell's curve is not yet measured, so the real result is not necessarily a parabola. [Windows volume taper](https://learn.microsoft.com/en-us/windows/win32/api/endpointvolume/nf-endpointvolume-iaudioendpointvolume-setmastervolumelevelscalar)
+The keyboard hook performs no COM, DDC, waits, or UI operations. It only queues intent. Core Audio default-endpoint notifications immediately invalidate its eligibility on a route change; the controller and worker also check the actual default endpoint before device operations. During DDC failure or suspension, keys return to Windows. If the input hook cannot be installed, hardware volume control stays inactive. No headphone endpoint is pinned or assigned the monitor's volume.
 
-| Driver-free approach | What the Windows slider means | Main tradeoff |
-| --- | --- | --- |
-| Equal-value sync | Same normalized setting as the monitor | Both attenuation stages vary, producing a different volume curve |
-| Mapped sync | Logical volume; monitor follows a separately chosen curve | Values differ, but the extra attenuation can be reduced |
-| Fixed monitor level | Ordinary Windows software volume | Preserves the Windows curve; monitor percentage is not synchronized |
-
-Equal-value sync is technically viable. It changes the volume response, not inherently the waveform fidelity. Test actual quiet-to-loud travel before deciding that the response is unusable. It may provide useful quiet listening levels; that is a listening-test outcome, not a guarantee.
-
-For mapped sync, keep the monitor in a useful upper portion of its range while Windows supplies the full adjustment range. An illustrative uncalibrated mapping is `h = 0.5 + 0.5*s`; choose actual limits only after testing the Dell. This removes the second near-zero control range but cannot preserve matching percentages. At zero, use mute explicitly. Both increase and decrease transitions need coalescing and readback because Windows reacts before DDC settles.
-
-Calibration can target a chosen combined curve `T(s)` using `M(h(s)) = T(s) / W(s)` where W is nonzero and the required gain lies inside the monitor's available range. It cannot manufacture unavailable gain. To preserve exactly the ordinary Windows curve scaled by a fixed maximum, `T(s) = C*W(s)`, the monitor gain must simply stay constant at C. Applying a square root to the monitor percentage alone does not cancel two unknown nonlinear curves.
-
-The fixed-level option uses a user-selected comfortable maximum monitor level, not an automatic jump to 100%. Windows then controls listening volume normally. Changing monitor buttons changes that ceiling unless the user explicitly restores it; do not fight physical-button changes.
-
-Equal-value sync is selected for the first preview. Measure and listen on the Dell before considering mapped sync. Fixed-level operation remains a possible later option if preserving the Windows volume response matters more than matching the monitor percentage; neither alternative is implemented.
-
-Resetting the same physical endpoint to 100% also resets its native slider. A change callback cannot disconnect those two meanings. No such reset loop will be implemented. [Endpoint volume controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
+The volume engine coalesces requests over 100 ms and checks readback after 200 ms, with at most three confirmation reads. New key/slider input supersedes delayed writes and readback. Idle polls every five seconds update the app's hardware level without changing Windows gain. Cancellation, output changes, and feature-range changes invalidate the current connection.
 
 ## Direct brightness with a Windows-style indicator
 
@@ -85,9 +69,11 @@ The target desktop reports `Not supported` for `WmiMonitorBrightness` and `WmiMo
 
 **Screen-brightness up/down media keys** change brightness by 5%; **Ctrl+Alt+Page Up / Page Down** remains a fallback. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 100 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
 
-Media-key input uses background Raw Input for the Consumer Control collection and the Windows HID parser for display-brightness usages `0x6F` and `0x70` on page `0x0C`. Ordinary typing, volume, and keyboard-backlight usages do not trigger brightness. Key state is tracked separately for each device and report ID; holding starts repeat after 400 ms, then every 100 ms. Device removal, suspend, and topology changes clear repeats. No input history is stored. [Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/about-raw-input), [HID parsing](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_getusages), [USB usage definitions](https://www.usb.org/sites/default/files/hut1_21_0.pdf)
+Media-key input uses background Raw Input and Windows' descriptor-based HID parser. It supports Consumer display brightness (`0C:6F/70`), Apple Vendor Keyboard (`FF01:20/21`), and Apple Top Case (`00FF:04/05`). Apple vendor-page interpretation requires vendor ID `05AC`; keyboard illumination, Fn, and ordinary F1/F2 are excluded. [USB definitions](https://www.usb.org/sites/default/files/hut1_21_0.pdf), [Apple usage definitions in the upstream HID library](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage.hpp), [usage pages](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage_page.hpp)
 
-Raw Input observes reports and does not suppress Windows or OEM brightness handling. Fn keys consumed by firmware or vendor software may not produce these reports; keyboard-specific compatibility requires a physical key test. The initial target is this desktop's external Dell, where native WMI brightness is unavailable. Native panel behavior on laptops remains unvalidated.
+Registrations cover every top-level collection on the Consumer and Apple pages. Other HID collections that declare supported brightness controls are discovered at startup and every five seconds. The parser reads button arrays, individual buttons, and scalar value fields through `HidP_GetUsages`/`HidP_GetUsageValue`, including multiple report IDs. Relative value reports produce pulses rather than stuck held keys. State is tracked per device and report ID; held keys repeat after 400 ms and then every 100 ms. Removal, suspend, and topology changes clear repeats. Diagnostics report declared controls without storing typing or input history. [Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/about-raw-input), [HID parsing](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_getusages)
+
+Raw Input observes reports and does not suppress native/OEM brightness handling. Magic Keyboard and Boot Camp support requires the driver to expose a supported report. Fn consumed inside firmware, keyboard-stack-only vendor fields, or ordinary F1/F2 translations cannot be distinguished automatically. No filter driver is installed and no ordinary function key is hijacked. Physical Apple USB/Bluetooth and laptop-panel validation remain outstanding.
 
 The noninteractive indicator has a sun icon, level bar, percentage, rounded corners, and Windows light/dark colours. It appears at the bottom centre of the target's work area, scales with that display's DPI, and fades after about two seconds. It neither activates nor appears in the taskbar and lets mouse input pass through. High contrast uses system colours and disables the shadow and animation. The tray remains the only place for configuration.
 
@@ -99,7 +85,7 @@ Use physical-monitor enumeration and `Dxva2.dll`. Read with `GetVCPFeatureAndVCP
 
 Probe brightness (`0x10`) and speaker volume (`0x62`). Investigate mute (`0x8D`) separately because encoding varies with MCCS version and can include screen-blanking semantics. Do not send guessed mute values. [Feature-code reference](https://www.ddcutil.com/vcpinfo_output/)
 
-Keep native DDC calls in a restartable worker process, separate from audio notifications and UI. Process isolation can contain a hung user-mode call; it cannot protect against a kernel driver fault. Serialize operations initially across the worker, and re-enumerate handles after restarting it.
+DDC reads have up to three attempts, 500 ms apart. A reported write failure is checked by readback before declaring failure; an uncertain write is never repeated. Volume requests carry the expected audio endpoint ID and recheck it in the worker after queue waits, read retries, and immediately before writing. Keep native DDC calls in a restartable worker process, separate from audio notifications and UI. Process isolation can contain a hung user-mode call; it cannot protect against a kernel driver fault. Serialize operations initially across the worker, and re-enumerate handles after restarting it.
 
 The coordinator discovers a fresh connection automatically. It requires an HDMI/DisplayPort audio endpoint and matches the driver's endpoint description to exactly one enumerated monitor model, ignoring connector suffixes and Windows' numeric prefixes. Duplicate models are rejected even if only one reports readable volume. This naming heuristic supports the initial Dell setup; it is not a hardware identity guarantee and cannot resolve every driver or multi-display topology. Missing, mismatched, or ambiguous descriptions leave the app waiting without adding a pairing setting. Once selected, the live endpoint ID and monitor device path identify the current connection. [Display audio form factor](https://learn.microsoft.com/en-us/windows/win32/coreaudio/pkey-audioendpoint-formfactor), [device properties](https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-properties)
 
@@ -108,16 +94,14 @@ Synchronization rules:
 1. Read live values on discovery. Do not apply a stale saved profile at startup.
 2. Normalize against verified feature ranges. Coalesce rapid requests to the newest value, with roughly 100 ms as an initial tuning target.
 3. Read back after settling. Publish the value actually applied, including clamping, without confusing it with newer pending intent.
-4. Poll slowly when idle, initially about every five seconds. Failed or unconfirmed operations end the current connection; automatic discovery retries after ten seconds. Readback is eventual, not instantaneous.
-5. Observed external changes update native logical controls without generating a new hardware command. Tag origin/revision to prevent feedback loops.
+4. Poll slowly when idle, initially about every five seconds. Failed or unconfirmed operations end the current connection; automatic discovery retries after one second. Readback is eventual, not instantaneous.
+5. Observed monitor changes update the app indicator/status without changing Windows gain or generating a new hardware command. Tag origin/revision to prevent feedback loops.
 6. Discard work from old connections. Re-enumerate after sleep, display changes, or audio-route changes.
 7. Mark unreadable or unavailable controls as such. Cached values must not be presented as verified hardware state.
 
 ## Audio lifecycle and recovery
 
-Only manage the default playback endpoint when it is display audio with one matching monitor. Switching to headphones suspends monitor control. The app checks the playback route every two seconds while waiting, and rebuilds the connection after a route change. Initial connection and recovery align both controls to the lower live volume; no saved pairing or enabled/paused state is used.
-
-In equal-value mode, a confirmed monitor-button change updates the Windows setting once; self-originated notifications must not cause another DDC write. With mapped sync, reverse updates require a defined invertible mapping, quantization tolerance, and behavior for hardware values outside its range. Do not claim exact reverse synchronization where those conditions are not met.
+Only manage the default playback endpoint when it is display audio with one matching monitor. Switching to headphones suspends monitor control. The app checks the playback route every two seconds while waiting, and rebuilds the connection after a route change. Initial connection and recovery adopt live monitor volume; when Windows is below 100%, a confirmed lower monitor setting precedes restoring Windows gain. No saved pairing or enabled/paused state is used.
 
 Preserve ordinary Windows mute behavior. Hardware mute, if separately offered, needs verified monitor-specific support. The initial volume mapping applies to ordinary shared-mode playback; exclusive-mode playback can bypass Windows software attenuation, changing the effective response. [Shared and exclusive audio controls](https://learn.microsoft.com/en-us/windows/win32/coreaudio/endpoint-volume-controls)
 
@@ -125,7 +109,7 @@ If a DDC operation fails, keep Windows volume functional, show an unavailable st
 
 ## Components and packaging
 
-The implementation uses C# with a WPF dispatcher and temporary brightness indicator, a Windows Forms tray icon, Core Audio callbacks for change revisions, and an isolated DDC worker. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
+The implementation uses C# with a WPF dispatcher and temporary volume/brightness indicators, a Windows Forms tray icon, Core Audio callbacks for change revisions, and an isolated DDC worker. The SDK is pinned to .NET 10.0.401 and the runtime is bundled. No custom driver, virtual audio device, audio bridge, or administrative service is part of this design. [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)
 
 Build a per-user MSI with WiX, bundle all runtime dependencies, and target normal installation without elevation on an unmanaged Windows 11 PC. Startup is enabled on a fresh installation or first portable launch. An empty startup registry value records an explicit opt-out; initialization, upgrade, and repair preserve it. Enabled startup entries refresh to the current executable path, and MSI ownership removes the entry on uninstall. WiX's current release policy includes a maintenance fee for revenue-generating use. [Installation contexts](https://learn.microsoft.com/en-us/windows/win32/msi/installation-context), [WiX](https://docs.firegiant.com/wix/)
 
@@ -140,9 +124,9 @@ For Store MSI submissions, provide signed installer/PE payloads, immutable versi
 1. **Read-only probe:** identify Windows build, GPU/driver, built-in-panel state, DDC ranges, current audio routing, and existing hardware-volume support.
 2. **Controlled Dell test:** verify reversible brightness/volume writes and monitor-button readback in SDR over HDMI, then DP. Restore test values. Record HDR behavior separately.
 3. **Direct brightness:** verify shortcuts, confirmed readback, indicator appearance and focus behavior, and cursor targeting. Unsupported or ambiguous targets must cause no writes to another screen. Repeat on multiple displays and DPI scales.
-4. **Volume comparison:** compare ordinary Windows volume at a fixed monitor setting, equal-value synchronization, and a mapped curve. Inspect the endpoint's reported dB levels, measure monitor gain if calibration is needed, and test useful listening range, mute, transition timing, and readback. Do not infer acoustical gain from raw percentages alone.
+4. **Hardware volume:** verify Windows stays at 100%, monitor keys/readback agree, mute is preserved, and headphones retain ordinary Windows behavior. Test the useful listening range; do not infer acoustical gain from raw percentages alone.
 5. **Recovery and polish:** test feedback suppression and stale operations with a fake transport, then sleep, reconnects, endpoint changes, DDC failure, application exit, accessibility, and multiple displays on Windows.
 6. **Release installation:** verify signed per-user installation, upgrade, repair, rollback, uninstall, startup cleanup, and clean-machine behavior with Windows protections enabled.
 7. **Distribution:** test the browser-downloaded MSI and accepted Store install separately. Signature verification does not prove reputation or Store acceptance.
 
-No custom driver will be created. Equal-value volume sync and direct DDC brightness are the selected implementation. Remaining validation includes the measured listening response, multiple displays, HDR behavior, and release installation.
+No custom driver will be created. Hardware volume with Windows at 100% and direct DDC brightness are the selected implementation. Remaining validation includes the measured listening response, multiple displays, HDR behavior, and release installation.

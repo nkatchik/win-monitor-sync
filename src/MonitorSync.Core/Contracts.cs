@@ -42,12 +42,10 @@ public interface IMonitorVolume
     Task WriteAsync(uint rawValue, CancellationToken cancellationToken);
 }
 
-public sealed record SyncOptions(int CoalesceMs = 100, int SettleMs = 200,
-    int PollMs = 5000, int ConfirmationAttempts = 3);
-
 public sealed record MonitorDescriptor(string Id, string Name,
     VolumeReading? Volume, VolumeReading? Brightness, string? Error);
 
-public sealed record WorkerRequest(string Operation, string? MonitorId = null, byte Code = 0, uint Value = 0);
+public sealed record WorkerRequest(string Operation, string? MonitorId = null, byte Code = 0, uint Value = 0,
+    string? AudioEndpointId = null);
 public sealed record WorkerResponse(bool Success, string? Error = null,
     MonitorDescriptor[]? Monitors = null, VolumeReading? Reading = null, bool TargetChanged = false);

@@ -22,12 +22,14 @@ while (Console.ReadLine() is { } line)
             "list" => new(true, Monitors: monitors.Enumerate()),
             "read" => new(true, Reading: monitors.Read(request.MonitorId ?? "", request.Code)),
             "write" => Write(request),
+            "read-volume" => Volume(request, false),
+            "write-volume" => Volume(request, true),
             "read-brightness" => new(true, Reading: monitors.ReadCursorBrightness(request.MonitorId ?? "")),
             "write-brightness" => WriteBrightness(request),
             _ => new(false, "Unknown operation.")
         };
     }
-    catch (Exception e) { response = new(false, e.Message, TargetChanged: e is MonitorTargetChangedException); }
+    catch (Exception e) { response = new(false, e.Message, TargetChanged: e is MonitorTargetChangedException or AudioRouteChangedException); }
     Console.WriteLine(JsonSerializer.Serialize(response));
 }
 
@@ -35,6 +37,20 @@ WorkerResponse Write(WorkerRequest request)
 {
     monitors.Write(request.MonitorId ?? "", request.Code, request.Value);
     return new(true);
+}
+
+WorkerResponse Volume(WorkerRequest request, bool write)
+{
+    using var audio = new AudioEndpoint(request.AudioEndpointId ?? "");
+    void Guard() => _ = audio.Capture();
+    if (write)
+    {
+        monitors.Write(request.MonitorId ?? "", 0x62, request.Value, Guard);
+        return new(true);
+    }
+    var reading = monitors.Read(request.MonitorId ?? "", 0x62, Guard);
+    Guard();
+    return new(true, Reading: reading);
 }
 
 WorkerResponse WriteBrightness(WorkerRequest request)

@@ -21,6 +21,13 @@ public sealed class DdcClient : IDisposable
     public async Task WriteAsync(string id, byte code, uint value, CancellationToken token = default) =>
         _ = await RequestAsync(new("write", id, code, value), token);
 
+    public async Task<VolumeReading> ReadVolumeAsync(string id, string endpointId, CancellationToken token) =>
+        (await RequestAsync(new("read-volume", id, AudioEndpointId: endpointId), token)).Reading
+        ?? throw new IOException("The monitor returned no volume value.");
+
+    public async Task WriteVolumeAsync(string id, string endpointId, uint value, CancellationToken token) =>
+        _ = await RequestAsync(new("write-volume", id, Value: value, AudioEndpointId: endpointId), token);
+
     public async Task<VolumeReading> ReadCursorBrightnessAsync(string id, CancellationToken token) =>
         (await RequestAsync(new("read-brightness", id), token)).Reading
         ?? throw new IOException("The monitor returned no brightness value.");
@@ -49,7 +56,7 @@ public sealed class DdcClient : IDisposable
                 _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) SettingsStore.Log(e.Data); };
                 _process.BeginErrorReadLine();
             }
-            if (!_initialized && request.Operation is ("read" or "write"))
+            if (!_initialized && request.Operation is ("read" or "write" or "read-volume" or "write-volume"))
             {
                 await SendAsync(new("list"), token);
                 _initialized = true;
@@ -100,8 +107,8 @@ public sealed class DdcClient : IDisposable
     public void Dispose() => Stop();
 }
 
-internal sealed class MonitorVolume(DdcClient client, string id) : IMonitorVolume
+internal sealed class MonitorVolume(DdcClient client, string id, string endpointId) : IMonitorVolume
 {
-    public Task<VolumeReading> ReadAsync(CancellationToken cancellationToken) => client.ReadAsync(id, 0x62, cancellationToken);
-    public Task WriteAsync(uint rawValue, CancellationToken cancellationToken) => client.WriteAsync(id, 0x62, rawValue, cancellationToken);
+    public Task<VolumeReading> ReadAsync(CancellationToken cancellationToken) => client.ReadVolumeAsync(id, endpointId, cancellationToken);
+    public Task WriteAsync(uint rawValue, CancellationToken cancellationToken) => client.WriteVolumeAsync(id, endpointId, rawValue, cancellationToken);
 }

@@ -1,6 +1,6 @@
 namespace MonitorSync.Core;
 
-public sealed class MonitorTargetChangedException() : Exception("The brightness target changed.");
+public sealed class MonitorTargetChangedException() : Exception("The monitor control target changed.");
 
 /// <summary>A single brightness key burst, based on a fresh hardware reading.</summary>
 public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTargetCurrent, Func<long> milliseconds)

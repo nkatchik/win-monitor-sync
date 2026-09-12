@@ -55,10 +55,16 @@ public sealed class PhysicalMonitors : IDisposable
         return result.ToArray();
     }
 
-    public VolumeReading Read(string id, byte code)
+    public VolumeReading Read(string id, byte code, Action? guard = null)
     {
         var handle = Get(id, code);
-        return ReadHandle(handle, code);
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1) Thread.Sleep(500);
+            guard?.Invoke();
+            try { return ReadHandle(handle, code); }
+            catch (Win32Exception) when (attempt < 3) { }
+        }
     }
 
     private static VolumeReading ReadHandle(IntPtr handle, byte code)
@@ -109,13 +115,20 @@ public sealed class PhysicalMonitors : IDisposable
         }
     }
 
-    public void Write(string id, byte code, uint value)
+    public void Write(string id, byte code, uint value, Action? guard = null)
     {
         var handle = Get(id, code);
         // Verify the feature/range on this live handle before writing.
-        var range = Read(id, code);
+        var range = Read(id, code, guard);
         if (value > range.Maximum) throw new IOException("Requested value exceeds the monitor's reported range.");
-        if (!SetVCPFeature(handle, code, value)) ThrowLast($"Write VCP 0x{code:X2}");
+        guard?.Invoke();
+        if (SetVCPFeature(handle, code, value)) return;
+        var error = Marshal.GetLastWin32Error();
+        // Some drivers report failure after delivery. Read back once (with bounded
+        // read recovery), but never repeat an uncertain write.
+        Thread.Sleep(200);
+        if (Read(id, code, guard).Current == value) return;
+        throw new Win32Exception(error, $"Write VCP 0x{code:X2} failed (Win32 0x{error:X8}): {new Win32Exception(error).Message}");
     }
 
     private IntPtr Get(string id, byte code)

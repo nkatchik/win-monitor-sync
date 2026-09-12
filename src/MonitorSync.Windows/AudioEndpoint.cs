@@ -12,6 +12,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
     private readonly IMMDeviceEnumerator _enumerator;
     private readonly IAudioEndpointVolume _volume;
     private readonly VolumeCallback _callback;
+    private readonly RouteCallback _route;
     private readonly string _id;
     private bool _disposed;
     private static readonly Guid Context = new("87B84C46-A77C-4650-A9EE-8824BC2B32DD");
@@ -34,14 +35,29 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
             _callback = new VolumeCallback(Context);
             try { HResult(_volume.RegisterControlChangeNotify(_callback)); }
             catch { Release(_volume); throw; }
+            _route = new RouteCallback(_id);
+            try { HResult(_enumerator.RegisterEndpointNotificationCallback(_route)); }
+            catch { _volume.UnregisterControlChangeNotify(_callback); Release(_volume); throw; }
         }
         catch { Release(_enumerator); throw; }
+    }
+
+    // Safe for an input hook: no COM or device I/O. A route change invalidates this instance permanently.
+    public bool IsCurrentRoute => !_disposed && _route.IsCurrent;
+
+    public bool TryToggleMute(AudioSnapshot expected)
+    {
+        var current = Capture();
+        if (current != expected || _callback.Revision != current.Revision) return false;
+        var context = Context;
+        HResult(_volume.SetMute(!current.Muted, ref context));
+        return true;
     }
 
     public AudioSnapshot Capture()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (DefaultId(_enumerator) != _id)
+        if (!IsCurrentRoute || DefaultId(_enumerator) != _id)
             throw new AudioRouteChangedException("The default playback device changed. Sync will check the new output.");
         var revision = _callback.Revision;
         HResult(_volume.GetMasterVolumeLevelScalar(out var value));
@@ -54,7 +70,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(percent, 0);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(percent, 100);
         var current = Capture();
-        if (current.EndpointId != expected.EndpointId || current.Percent != expected.Percent ||
+        if (current.EndpointId != expected.EndpointId || current.Percent != expected.Percent || current.Muted != expected.Muted ||
             current.Revision != expected.Revision || _callback.Revision != current.Revision)
             return false;
         var context = Context;
@@ -136,9 +152,36 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
         if (_disposed) return;
         _disposed = true;
         _volume.UnregisterControlChangeNotify(_callback);
+        _enumerator.UnregisterEndpointNotificationCallback(_route);
         Release(_volume);
         Release(_enumerator);
         GC.KeepAlive(_callback);
+        GC.KeepAlive(_route);
+    }
+
+    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+    public sealed class RouteCallback(string id) : IMMNotificationClient
+    {
+        private int _invalid;
+        public bool IsCurrent => Volatile.Read(ref _invalid) == 0;
+        public int OnDeviceStateChanged(string deviceId, uint state)
+        { if (deviceId == id && state != 1) Interlocked.Exchange(ref _invalid, 1); return 0; }
+        public int OnDeviceAdded(string deviceId) => 0;
+        public int OnDeviceRemoved(string deviceId)
+        { if (deviceId == id) Interlocked.Exchange(ref _invalid, 1); return 0; }
+        public int OnDefaultDeviceChanged(int flow, int role, string? deviceId)
+        { if (flow == 0 && role == 1 && deviceId != id) Interlocked.Exchange(ref _invalid, 1); return 0; }
+        public int OnPropertyValueChanged(string deviceId, PropertyKey key) => 0;
+    }
+
+    [ComVisible(true), Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMMNotificationClient
+    {
+        [PreserveSig] int OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string id, uint state);
+        [PreserveSig] int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string id);
+        [PreserveSig] int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string id);
+        [PreserveSig] int OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string? id);
+        [PreserveSig] int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string id, PropertyKey key);
     }
 
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
@@ -166,8 +209,8 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
         [PreserveSig] int EnumAudioEndpoints(int flow, uint mask, out IntPtr devices);
         [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice device);
         [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice device);
-        [PreserveSig] int RegisterEndpointNotificationCallback(IntPtr callback);
-        [PreserveSig] int UnregisterEndpointNotificationCallback(IntPtr callback);
+        [PreserveSig] int RegisterEndpointNotificationCallback(IMMNotificationClient callback);
+        [PreserveSig] int UnregisterEndpointNotificationCallback(IMMNotificationClient callback);
     }
 
     [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -204,7 +247,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct PropertyKey { public Guid FormatId; public uint Id; }
+    public struct PropertyKey { public Guid FormatId; public uint Id; }
     [StructLayout(LayoutKind.Explicit, Size = 24)]
     private struct PropertyVariant
     {
