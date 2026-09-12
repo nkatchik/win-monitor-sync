@@ -14,9 +14,6 @@ public sealed class SyncController : IDisposable
     private Task _runTask = Task.CompletedTask;
     private HardwareVolumeController? _engine;
     private AudioEndpoint? _audio;
-    private CursorDisplay? _display;
-    private BrightnessFlyout? _flyout;
-    private bool _showVolume;
     private int _muteRequests;
     private bool _started, _suspended, _disposed;
     private string _status = "Finding monitor speakers…", _levels = "";
@@ -30,7 +27,6 @@ public sealed class SyncController : IDisposable
         if (_suspended || _connection?.IsCancellationRequested != false || _audio?.IsCurrentRoute != true || _engine is null)
             return false;
         if (delta == 0) _muteRequests++; else _engine.Step(delta);
-        _showVolume = true;
         return true;
     }
 
@@ -91,7 +87,6 @@ public sealed class SyncController : IDisposable
                             await engine.StartAsync(token);
                             _audio = audio;
                             _engine = engine;
-                            _display = CursorDisplay.FindById(monitor.Id);
                             while (true)
                             {
                                 if (_muteRequests > 0)
@@ -103,12 +98,6 @@ public sealed class SyncController : IDisposable
                                 token.ThrowIfCancellationRequested();
                                 SetStatus(engine.IsPending ? "Adjusting monitor volume…" : "Monitor volume control is on",
                                     $"Monitor {engine.MonitorPercent}%{(engine.Muted ? " · Muted" : "")} · Windows {engine.WindowsPercent}%");
-                                if (_showVolume && _display is not null)
-                                {
-                                    _flyout ??= new BrightnessFlyout(() => _audio?.IsCurrentRoute == true && !_suspended);
-                                    _flyout.ShowLevel(_display, engine.MonitorPercent, engine.IsPending, engine.Muted);
-                                    if (!engine.IsPending) _showVolume = false;
-                                }
                                 await Task.Delay(50, token);
                             }
                         }
@@ -139,10 +128,7 @@ public sealed class SyncController : IDisposable
             {
                 _engine = null;
                 _audio = null;
-                _display = null;
-                _showVolume = false;
                 _muteRequests = 0;
-                _flyout?.HideImmediately();
             }
 
             try { await Task.Delay(retryDelay, token); }
@@ -180,7 +166,6 @@ public sealed class SyncController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
-        _flyout?.Close();
         if (_ownsDdc) _ddc.Dispose();
         _lifetime.Dispose();
     }

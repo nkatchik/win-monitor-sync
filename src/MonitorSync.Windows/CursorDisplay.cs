@@ -9,27 +9,6 @@ public sealed record CursorDisplay(IntPtr Handle, string Id, int Left, int Top, 
         if (!GetCursorPos(out var point)) return null;
         // MONITOR_DEFAULTTONULL: never substitute the nearest or primary display.
         var handle = MonitorFromPoint(point, 0);
-        return FromHandle(handle);
-    }
-
-    public static CursorDisplay? FindById(string id)
-    {
-        CursorDisplay? found = null;
-        var count = 0;
-        MonitorEnumProc callback = (IntPtr handle, IntPtr dc, ref Rect rect, IntPtr data) =>
-        {
-            var display = FromHandle(handle);
-            if (display is not null && string.Equals(display.Id, id, StringComparison.OrdinalIgnoreCase))
-            { found = display; count++; }
-            return true;
-        };
-        var success = EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
-        GC.KeepAlive(callback);
-        return success && count == 1 ? found : null;
-    }
-
-    private static CursorDisplay? FromHandle(IntPtr handle)
-    {
         if (handle == IntPtr.Zero) return null;
         var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
         if (!GetMonitorInfo(handle, ref info)) return null;
@@ -50,9 +29,6 @@ public sealed record CursorDisplay(IntPtr Handle, string Id, int Left, int Top, 
         string.Equals(current.Id, Id, StringComparison.OrdinalIgnoreCase);
 
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
-    private delegate bool MonitorEnumProc(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr data);
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct MonitorInfo

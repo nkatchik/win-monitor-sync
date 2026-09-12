@@ -34,6 +34,24 @@ static class HardwareVolumeTests
             await f.Start(); await f.Tick(100); await f.Tick(300); await f.Tick(500);
             await Throws<IOException>(() => f.Tick(700)); Equal(20, f.Audio.Percent);
         }),
+        ("A DDC write acknowledgement alone cannot raise Windows to 100", async () =>
+        {
+            var f = new Fixture(20); f.Monitor.ApplyWrites = false;
+            await f.Start(); await f.Tick(100);
+            Equal(1, f.Monitor.Writes.Count); Equal(0, f.Audio.Writes.Count);
+            await f.Tick(300); await f.Tick(500);
+            Equal(20, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
+            f.Monitor.Current = 20; await f.Tick(700);
+            Equal(100, f.Audio.Percent); Equal(1, f.Audio.Writes.Count);
+        }),
+        ("Failed DDC readback after a successful set preserves the Windows request", async () =>
+        {
+            var f = new Fixture(); await f.Start(); f.Audio.UserSet(25);
+            await f.Tick(0); await f.Tick(100); Equal(25u, f.Monitor.Current);
+            f.Monitor.OnRead = () => throw new IOException("Readback failed");
+            await Throws<IOException>(() => f.Tick(300));
+            Equal(25, f.Audio.Percent); Equal(0, f.Audio.Writes.Count);
+        }),
         ("A failed write never raises Windows", async () =>
         {
             var f = new Fixture(20); await f.Start();

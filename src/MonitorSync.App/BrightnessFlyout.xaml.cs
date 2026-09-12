@@ -18,31 +18,26 @@ public partial class BrightnessFlyout : Window
     private CursorDisplay? _target;
     private int _presentation;
     private readonly Media.Effects.Effect? _shadow;
-    private readonly Func<bool>? _isVolumeCurrent;
 
-    public BrightnessFlyout(Func<bool>? isVolumeCurrent = null)
+    public BrightnessFlyout()
     {
         InitializeComponent();
-        _isVolumeCurrent = isVolumeCurrent;
-        if (isVolumeCurrent is not null) Title = "Volume";
         _shadow = Surface.Effect;
         _hide.Tick += (_, _) => FadeOut();
-        _cursor.Tick += (_, _) => { if (_target is null || !IsTargetCurrent(_target)) HideImmediately(); };
+        _cursor.Tick += (_, _) => { if (_target?.IsCurrent() != true) HideImmediately(); };
         Closed += (_, _) => { _hide.Stop(); _cursor.Stop(); };
     }
 
-    public void ShowLevel(CursorDisplay target, int percent, bool pending, bool muted = false)
+    public void ShowLevel(CursorDisplay target, int percent, bool pending)
     {
         percent = Math.Clamp(percent, 0, 100);
         Level.Visibility = Visibility.Visible;
         Message.Visibility = Visibility.Collapsed;
-        Value.Text = muted ? "×" : percent.ToString(System.Globalization.CultureInfo.CurrentCulture);
-        Sun.Text = _isVolumeCurrent is null ? "\uE706" : muted ? "\uE74F" : "\uE767";
-        AutomationProperties.SetName(Sun, Title);
+        Value.Text = percent.ToString(System.Globalization.CultureInfo.CurrentCulture);
         Fill.Width = 176 * percent / 100.0;
         ThumbPosition.X = Fill.Width - 6;
         Level.Opacity = pending ? 0.65 : 1;
-        AutomationProperties.SetName(Level, $"{Title} {percent} percent{(muted ? ", muted" : "")}{(pending ? ", adjusting" : "")}");
+        AutomationProperties.SetName(Level, $"Brightness {percent} percent{(pending ? ", adjusting" : "")}");
         Present(target);
     }
 
@@ -56,7 +51,7 @@ public partial class BrightnessFlyout : Window
 
     private void Present(CursorDisplay target)
     {
-        if (!IsTargetCurrent(target)) return;
+        if (!target.IsCurrent()) return;
         _target = target;
         _presentation++;
         ApplyTheme();
@@ -79,9 +74,6 @@ public partial class BrightnessFlyout : Window
         _hide.Stop(); _hide.Start();
         _cursor.Start();
     }
-
-    private bool IsTargetCurrent(CursorDisplay target) => _isVolumeCurrent is null ? target.IsCurrent() :
-        _isVolumeCurrent() && CursorDisplay.FindById(target.Id)?.Handle == target.Handle;
 
     private void ApplyTheme()
     {

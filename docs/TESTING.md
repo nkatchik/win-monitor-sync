@@ -74,6 +74,13 @@ Brightness and the startup registry entry were restored after the harness. Trace
 
 Reports and traces are in ignored `artifacts/debug`.
 
+### Volume overlay removal, 12 September 2026
+
+- Removed the app's volume overlay and the volume-specific display lookup. Brightness retains its existing indicator; confirmed volume remains in tray status.
+- Debug build passed with zero warnings/errors; **55/55 tests passed**. Added regression cases proving that a successful DDC set with stale readback cannot raise Windows gain, and that readback failure after a successful set preserves the Windows volume request. The existing readback guard was retained.
+- The attempted live Dell check stopped before changing any device values because a non-monitor output was selected. A separate production-app check verified no app window or overlay, volume/mute requests passing through to Windows, and the selected Steam Streaming Microphone endpoint remaining at 60%, unmuted. Its startup preference was restored afterward.
+- Live Dell volume-key testing without the overlay remains an interactive check. Earlier Dell write/readback results above still describe the unchanged volume engine; they do not establish whether a monitor displays its own OSD for DDC changes.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -83,7 +90,7 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Command-line diagnostics | Reports live Windows and monitor values; changes neither values nor startup preference |
 | Windows volume change with the app exited | Establish whether monitor OSD already follows it; if it does, investigate existing hardware integration before adding duplicate control |
 | Launch with unequal values | Confirm the lower monitor setting before restoring Windows to 100%; if Windows is already 100%, preserve live monitor volume |
-| Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app indicator shows confirmed hardware volume |
+| Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app creates no volume overlay; confirmed volume appears in tray status |
 | Quick Settings | A new endpoint percentage is applied to hardware and Windows returns to 100% after confirmation; no reset feedback loop |
 | Drag slider and hold volume key | Values make progress during continuous input; no feedback oscillation or late rollback |
 | Dell volume buttons | Tray monitor level follows within approximately five seconds while Windows stays at 100% |
