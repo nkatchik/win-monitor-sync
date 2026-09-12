@@ -7,7 +7,7 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. HDMI ch
 ## Preview behavior
 
 - Volume keys adjust the monitor by 2%. The app shows no volume overlay; the monitor may show its own OSD. The selected monitor's Windows endpoint stays at **100%** during normal operation.
-- The tray menu includes **Volume XX%** and **Brightness XX%** sliders for currently available controls. Volume targets the selected monitor speakers; brightness targets the screen under the cursor. Opening the menu reads live levels without changing them. Dragging or using arrow keys adjusts the level without closing the menu.
+- Left-click or right-click the tray icon to open the same menu, with **Volume XX%** and **Brightness XX%** sliders for currently available controls. Volume targets the selected monitor speakers; brightness targets the screen under the cursor. Opening the menu reads live levels without changing them. Dragging or using arrow keys adjusts the level without closing the menu.
 - Monitor-button changes are checked every five seconds and update the tray's displayed level. Windows remains at 100%.
 - Control starts automatically from live readings. If Windows is below 100%, the app confirms a write at the lower current percentage before raising Windows to 100%. This removes one attenuation stage and can change perceived loudness. Saved volume levels are never restored.
 - Rapid input is coalesced and writes are read back. Failed reads get up to three attempts, 500 ms apart. A failed connection retries after one second; unsupported-monitor discovery repeats every two seconds.

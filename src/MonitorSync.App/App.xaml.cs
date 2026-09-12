@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using Microsoft.Win32;
@@ -72,6 +73,13 @@ public partial class App : System.Windows.Application
             Icon = System.Drawing.SystemIcons.Application,
             Text = "Monitor Sync", Visible = true, ContextMenuStrip = menu
         };
+        _tray.MouseClick += (_, args) =>
+        {
+            if (args.Button != Forms.MouseButtons.Left) return;
+            menu.Show(Forms.Cursor.Position);
+            // Give the popup focus so keyboard navigation and outside-click dismissal work.
+            SetForegroundWindow(menu.Handle);
+        };
         _controller.Changed += (_, _) => UpdateStatus();
         try { _volumeMediaKeys = new VolumeMediaKeys(_controller.TryQueueVolumeKey); }
         catch (Exception error) { SettingsStore.Log(error.ToString()); }
@@ -98,6 +106,10 @@ public partial class App : System.Windows.Application
         SystemEvents.PowerModeChanged += PowerChanged;
         _controller.Start(_volumeMediaKeys is not null);
     }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr window);
 
     private void UpdateStartupItem()
     {

@@ -95,6 +95,11 @@ Reports and traces are in ignored `artifacts/debug`.
 - Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**. Updated timing cases cover writes at 20 ms, newest-value coalescing, progress during continuous input, and confirmation only after another 200 ms without prematurely raising Windows gain.
 - Actual monitor response times at this batching interval have not been measured. Serialized hardware reads/writes and driver latency can still skip intermediate slider values.
 
+### Tray click behavior, 13 September 2026
+
+- Left-click now opens the same tray menu as right-click and gives the popup focus. Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**.
+- Native tray mouse-up callbacks against the running app verified that each button opens the same menu once, Escape dismisses the left-click menu, and switching focus dismisses either menu. Left-click reopened correctly afterward. No slider values were changed; physical mouse clicks were not simulated globally.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
