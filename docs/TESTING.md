@@ -89,6 +89,12 @@ Reports and traces are in ignored `artifacts/debug`.
 - Mouse capture and arrow-key input kept the menu open. Availability updates hid the brightness control on simulated suspend and restored it on resume. The menu closed normally and stayed inside the monitor work area while rows changed. The 150%-DPI native-control layout and bounds were inspected. Traces and render captures are under ignored `artifacts/debug`.
 - Cross-monitor movement, mixed DPI, screen-reader navigation, and physical monitor OSD behavior remain interactive acceptance items. Tests sent messages to the native trackbar control; no global key injection or audio-route switch was performed.
 
+### Faster input batching, 13 September 2026
+
+- Reduced volume and brightness batching from 100 ms to 20 ms, with both app control loops checking work every 20 ms. The 200 ms confirmation delay and DDC retry behavior remain unchanged.
+- Debug build passed with zero warnings/errors; **64/64 deterministic tests passed**. Updated timing cases cover writes at 20 ms, newest-value coalescing, progress during continuous input, and confirmation only after another 200 ms without prematurely raising Windows gain.
+- Actual monitor response times at this batching interval have not been measured. Serialized hardware reads/writes and driver latency can still skip intermediate slider values.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.

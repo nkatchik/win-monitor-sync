@@ -9,12 +9,13 @@ var tests = new (string Name, Func<Task> Run)[]
         await f.Start(); f.Monitor.OnRead = null; await f.Tick(100); await f.Tick(300);
         Equal(65, f.Engine.Percent); Equal(1, f.Monitor.Writes.Count);
     }),
-    ("Brightness slider drags coalesce to the latest absolute level", async () =>
+    ("Brightness slider drags coalesce to the latest absolute level within 20 ms", async () =>
     {
         var f = new BrightnessFixture(); await f.Start();
-        f.Engine.SetPercent(20); await f.Tick(50); f.Engine.SetPercent(30); await f.Tick(100);
+        f.Engine.SetPercent(20); await f.Tick(10); f.Engine.SetPercent(30);
+        await f.Tick(19); Equal(0, f.Monitor.Writes.Count); await f.Tick(20);
         Equal(1, f.Monitor.Writes.Count); Equal(30u, f.Monitor.Current);
-        await f.Tick(300); Equal(30, f.Engine.Percent);
+        await f.Tick(220); Equal(30, f.Engine.Percent);
     }),
     ("Moving screens rejects a queued brightness slider write", async () =>
     {
@@ -75,9 +76,10 @@ var tests = new (string Name, Func<Task> Run)[]
     {
         var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start();
         Equal(40, f.Engine.Percent); Equal(0, f.Monitor.Writes.Count);
-        await f.Tick(99); Equal(0, f.Monitor.Writes.Count);
-        await f.Tick(100); Equal(35u, f.Monitor.Current); Equal(40, f.Engine.Percent);
-        await f.Tick(300); Equal(35, f.Engine.Percent); Equal(false, f.Engine.IsPending);
+        await f.Tick(19); Equal(0, f.Monitor.Writes.Count);
+        await f.Tick(20); Equal(35u, f.Monitor.Current); Equal(40, f.Engine.Percent);
+        await f.Tick(219); Equal(1, f.Monitor.Reads); Equal(40, f.Engine.Percent);
+        await f.Tick(220); Equal(2, f.Monitor.Reads); Equal(35, f.Engine.Percent); Equal(false, f.Engine.IsPending);
     }),
     ("Brightness input during discovery preserves clamping and reversal order", async () =>
     {
@@ -98,9 +100,11 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Held brightness keys coalesce without postponing the deadline", async () =>
     {
         var f = new BrightnessFixture(); f.Engine.Step(5); await f.Start();
-        for (var t = 20; t <= 100; t += 20) { f.Engine.Step(5); await f.Tick(t); }
-        Equal(1, f.Monitor.Writes.Count); Equal(70u, f.Monitor.Current);
-        await f.Tick(300); Equal(70, f.Engine.Percent);
+        for (var t = 5; t <= 20; t += 5) { f.Now = t; f.Engine.Step(5); await f.Tick(t); }
+        Equal(1, f.Monitor.Writes.Count); Equal(65u, f.Monitor.Current);
+        for (var t = 25; t <= 45; t += 5) { f.Now = t; f.Engine.Step(5); await f.Tick(t); }
+        Equal(2, f.Monitor.Writes.Count); Equal(90u, f.Monitor.Current);
+        await f.Tick(245); Equal(90, f.Engine.Percent); Equal(false, f.Engine.IsPending);
     }),
     ("Brightness input during a delayed write supersedes its completion", async () =>
     {

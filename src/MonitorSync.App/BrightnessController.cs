@@ -101,7 +101,7 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
                     await engine.TickAsync(token);
                     var current = (engine.Percent, engine.IsPending);
                     if (current != shown) { Publish(session); shown = current; }
-                    if (engine.IsPending) await Task.Delay(25, token);
+                    if (engine.IsPending) await Task.Delay(20, token);
                 }
             }
             catch (MonitorTargetChangedException) { _flyout?.HideImmediately(); }

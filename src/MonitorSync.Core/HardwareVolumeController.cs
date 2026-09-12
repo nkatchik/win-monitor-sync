@@ -123,7 +123,7 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
 
     private void Queue(int desired)
     {
-        if (!_dirty) _writeDue = milliseconds() + 100;
+        if (!_dirty) _writeDue = milliseconds() + 20;
         _desired = desired;
         _dirty = true;
         _expected = null;

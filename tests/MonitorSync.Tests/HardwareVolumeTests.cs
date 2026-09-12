@@ -4,12 +4,13 @@ static class HardwareVolumeTests
 {
     public static readonly (string Name, Func<Task> Run)[] Cases =
     [
-        ("Volume slider input coalesces to the latest absolute level", async () =>
+        ("Volume slider input coalesces to the latest absolute level within 20 ms", async () =>
         {
             var f = new Fixture(); await f.Start();
-            f.Engine.SetPercent(20); await f.Tick(50); f.Engine.SetPercent(30); await f.Tick(100);
+            f.Engine.SetPercent(20); await f.Tick(10); f.Engine.SetPercent(30);
+            await f.Tick(19); Equal(0, f.Monitor.Writes.Count); await f.Tick(20);
             Equal(1, f.Monitor.Writes.Count); Equal(30u, f.Monitor.Current);
-            await f.Tick(300); Equal(30, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
+            await f.Tick(220); Equal(30, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
         }),
         ("Volume keys continue from pending slider input", async () =>
         {
@@ -43,8 +44,10 @@ static class HardwareVolumeTests
         ("Adoption confirms the lower setting before raising Windows to 100", async () =>
         {
             var f = new Fixture(20, 60); await f.Start();
-            Equal(20, f.Audio.Percent); await f.Tick(100); Equal(20u, f.Monitor.Current);
-            Equal(20, f.Audio.Percent); await f.Tick(300); Equal(100, f.Audio.Percent);
+            await f.Tick(19); Equal(0, f.Monitor.Writes.Count);
+            Equal(20, f.Audio.Percent); await f.Tick(20); Equal(20u, f.Monitor.Current);
+            await f.Tick(219); Equal(1, f.Monitor.Reads); Equal(20, f.Audio.Percent);
+            await f.Tick(220); Equal(2, f.Monitor.Reads); Equal(100, f.Audio.Percent);
             await f.Tick(6000); Equal(20, f.Engine.MonitorPercent); Equal(1, f.Monitor.Writes.Count);
         }),
         ("Equal startup levels still verify write control before pinning", async () =>
@@ -91,17 +94,19 @@ static class HardwareVolumeTests
         ("Volume keys move only monitor gain", async () =>
         {
             var f = new Fixture(); await f.Start(); f.Engine.Step(-2);
-            await f.Tick(99); Equal(0, f.Monitor.Writes.Count);
-            await f.Tick(100); Equal(40, f.Engine.MonitorPercent);
-            await f.Tick(300); Equal(38, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
+            await f.Tick(19); Equal(0, f.Monitor.Writes.Count);
+            await f.Tick(20); Equal(38u, f.Monitor.Current); Equal(40, f.Engine.MonitorPercent);
+            await f.Tick(220); Equal(38, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
             Equal(0, f.Audio.Writes.Count);
         }),
         ("Held volume keys coalesce without postponing writes", async () =>
         {
             var f = new Fixture(); await f.Start(); f.Engine.Step(2);
-            for (var t = 20; t <= 100; t += 20) { f.Engine.Step(2); await f.Tick(t); }
-            Equal(1, f.Monitor.Writes.Count); Equal(52u, f.Monitor.Current);
-            await f.Tick(300); Equal(52, f.Engine.MonitorPercent);
+            for (var t = 5; t <= 20; t += 5) { f.Now = t; f.Engine.Step(2); await f.Tick(t); }
+            Equal(1, f.Monitor.Writes.Count); Equal(50u, f.Monitor.Current);
+            for (var t = 25; t <= 45; t += 5) { f.Now = t; f.Engine.Step(2); await f.Tick(t); }
+            Equal(2, f.Monitor.Writes.Count); Equal(60u, f.Monitor.Current);
+            await f.Tick(245); Equal(60, f.Engine.MonitorPercent); Equal(false, f.Engine.IsPending);
         }),
         ("Keys at either volume limit do not write", async () =>
         {

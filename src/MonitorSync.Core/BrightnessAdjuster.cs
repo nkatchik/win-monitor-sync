@@ -35,7 +35,7 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
     {
         if (desired == _desired) return;
         _desired = desired;
-        if (!_dirty) _writeDue = milliseconds() + 100;
+        if (!_dirty) _writeDue = milliseconds() + 20;
         _dirty = true;
         _expected = null;
     }
@@ -54,7 +54,7 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
         _initialInput.Clear();
         _started = true;
         _dirty = reading.RawFor(_desired) != reading.Current;
-        _writeDue = milliseconds() + 100;
+        _writeDue = milliseconds() + 20;
     }
 
     public async Task TickAsync(CancellationToken token)

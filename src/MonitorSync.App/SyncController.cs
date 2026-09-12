@@ -109,7 +109,7 @@ public sealed class SyncController : IDisposable
                                 token.ThrowIfCancellationRequested();
                                 SetStatus(engine.IsPending ? "Adjusting monitor volume…" : "Monitor volume control is on",
                                     $"Volume {engine.MonitorPercent}%");
-                                await Task.Delay(50, token);
+                                await Task.Delay(20, token);
                             }
                         }
                     }

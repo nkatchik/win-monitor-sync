@@ -55,7 +55,7 @@ On discovery, read live values. If Windows already equals 100%, preserve current
 
 The keyboard hook performs no COM, DDC, waits, or UI operations. It only queues intent. Core Audio default-endpoint notifications immediately invalidate its eligibility on a route change; the controller and worker also check the actual default endpoint before device operations. During DDC failure or suspension, keys return to Windows. If the input hook cannot be installed, hardware volume control stays inactive. No headphone endpoint is pinned or assigned the monitor's volume.
 
-The volume engine coalesces requests over 100 ms and checks readback after 200 ms, with at most three confirmation reads. New key/slider input supersedes delayed writes and readback. Idle polls every five seconds update the app's hardware level without changing Windows gain. Cancellation, output changes, and feature-range changes invalidate the current connection.
+The volume engine coalesces requests over 20 ms and checks readback after 200 ms, with at most three confirmation reads. New key/slider input supersedes delayed writes and readback. Idle polls every five seconds update the app's hardware level without changing Windows gain. Cancellation, output changes, and feature-range changes invalidate the current connection.
 
 ## Tray sliders
 
@@ -75,7 +75,7 @@ Twinkle Tray's project documentation likewise reports no official API for modify
 
 The target desktop reports `Not supported` for `WmiMonitorBrightness` and `WmiMonitorBrightnessMethods`. The user therefore chose direct monitor control with on-screen feedback that resembles Windows. A laptop panel's native slider is not forwarded to an external monitor, and no native Quick Settings integration is claimed.
 
-**Screen-brightness up/down media keys** change brightness by 5%; **Ctrl+Alt+Page Up / Page Down** remains a fallback. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 100 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
+**Screen-brightness up/down media keys** change brightness by 5%; **Ctrl+Alt+Page Up / Page Down** remains a fallback. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 20 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
 
 Media-key input uses background Raw Input and Windows' descriptor-based HID parser. It supports Consumer display brightness (`0C:6F/70`), Apple Vendor Keyboard (`FF01:20/21`), and Apple Top Case (`00FF:04/05`). Apple vendor-page interpretation requires vendor ID `05AC`; keyboard illumination, Fn, and ordinary F1/F2 are excluded. [USB definitions](https://www.usb.org/sites/default/files/hut1_21_0.pdf), [Apple usage definitions in the upstream HID library](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage.hpp), [usage pages](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage_page.hpp)
 
@@ -100,7 +100,7 @@ The coordinator discovers a fresh connection automatically. It requires an HDMI/
 Synchronization rules:
 
 1. Read live values on discovery. Do not apply a stale saved profile at startup.
-2. Normalize against verified feature ranges. Coalesce rapid requests to the newest value, with roughly 100 ms as an initial tuning target.
+2. Normalize against verified feature ranges. Coalesce rapid requests to the newest value over 20 ms. Both control loops check pending work every 20 ms; scheduling and serialized DDC I/O add latency, so this is not a guarantee of 50 hardware updates per second.
 3. Read back after settling. Publish the value actually applied, including clamping, without confusing it with newer pending intent.
 4. Poll slowly when idle, initially about every five seconds. Failed or unconfirmed operations end the current connection; automatic discovery retries after one second. Readback is eventual, not instantaneous.
 5. Observed monitor changes update tray status without changing Windows gain or generating a new hardware command. Tag origin/revision to prevent feedback loops.
