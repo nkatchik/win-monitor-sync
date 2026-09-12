@@ -54,6 +54,14 @@ Local integration traces and the final read-only report are under ignored `artif
 
 Brightness and the startup registry entry were restored after the harness. Traces and the rendered indicator are under ignored `artifacts/debug`.
 
+### Brightness media-key revision, 12 September 2026
+
+- Debug build passed with zero warnings and errors; **49/49** deterministic tests passed. Six additional cases cover initial press, release, repeat timing, duplicate reports, independent report IDs, conflicting directions, device removal, and delayed dispatch.
+- Read-only HID discovery found Consumer Control report ranges including display-brightness up/down on the Logitech receiver and two Razer collections. A report range alone does not prove that a physical key sends a particular usage.
+- The production HID parser was tested with Windows-generated reports constructed only in memory from those three live descriptors. Brightness up, down, and release decoded correctly. Volume-up and keyboard-backlight usages did not trigger brightness; malformed report lengths were ignored. No keyboard input was injected and no device state was changed.
+- Background Consumer Control registration and disposal cleanup passed. The successful integration trace is in ignored `artifacts/debug/brightness-media-smoke.log`.
+- Physical brightness-key delivery, OEM/Fn behavior, and interaction with native laptop-panel brightness remain unverified. The existing shortcut remains a fallback.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -74,7 +82,7 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Sleep / wake / cable reconnect | Pending operations are canceled; live handles are recreated; stale requests do not alter a new output |
 | Different input / port | New endpoint and monitor are discovered automatically when descriptions match uniquely |
 | Disable/re-enable DDC/CI | Tray shows unavailability and automatic retry recovers; Windows audio remains usable |
-| Brightness in SDR | Ctrl+Alt+Page Up / Page Down changes only the cursor's screen by 5%; confirm visible backlight change and monitor OSD readback |
+| Brightness in SDR | Screen-brightness media keys and fallback shortcuts change only the cursor's screen by 5%; confirm visible backlight change and monitor OSD readback |
 | Brightness in HDR | Record limitations; do not treat Windows SDR-content brightness as physical backlight control |
 | Multi-display / clone | Duplicate model names and ambiguous physical mappings leave sync waiting |
 | Audio output on display A, cursor on display B | Volume sync controls only A; cursor position does not redirect audio |

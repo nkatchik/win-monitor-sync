@@ -2,6 +2,51 @@ using MonitorSync.Core;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Brightness media keys step on press and stop on release", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        Equal(5, keys.Update(1, 3, true, false)); Equal(true, keys.HasKeys);
+        now = 399; Equal(0, keys.Tick()); now = 400; Equal(5, keys.Tick());
+        Equal(0, keys.Update(1, 3, false, false)); now = 1000; Equal(0, keys.Tick()); Equal(false, keys.HasKeys);
+        return Task.CompletedTask;
+    }),
+    ("Repeated HID state reports do not duplicate steps or defer repeat", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        Equal(-5, keys.Update(1, 3, false, true));
+        for (now = 20; now < 400; now += 20) Equal(0, keys.Update(1, 3, false, true));
+        Equal(-5, keys.Tick()); now = 499; Equal(0, keys.Tick()); now = 500; Equal(-5, keys.Tick());
+        return Task.CompletedTask;
+    }),
+    ("Unrelated HID report IDs cannot release a held brightness key", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        keys.Update(1, 3, true, false); keys.Update(1, 4, false, false);
+        now = 400; Equal(5, keys.Tick());
+        return Task.CompletedTask;
+    }),
+    ("Brightness media key reversal and conflicting keys are handled", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        Equal(5, keys.Update(1, 3, true, false)); now = 100;
+        Equal(-5, keys.Update(1, 3, false, true)); now = 400; Equal(0, keys.Tick());
+        now = 500; Equal(-5, keys.Tick()); keys.Update(1, 3, true, true);
+        now = 1000; Equal(0, keys.Tick());
+        return Task.CompletedTask;
+    }),
+    ("Removing a keyboard or suspending clears brightness repeats", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        keys.Update(1, 3, true, false); keys.Update(2, 3, false, true); keys.Remove(1);
+        now = 400; Equal(-5, keys.Tick()); keys.Clear(); now = 800; Equal(0, keys.Tick());
+        return Task.CompletedTask;
+    }),
+    ("A delayed dispatcher does not produce a brightness catch-up burst", () =>
+    {
+        long now = 0; var keys = new BrightnessKeyRepeater(() => now);
+        keys.Update(1, 3, true, false); now = 10000; Equal(5, keys.Tick()); Equal(0, keys.Tick());
+        return Task.CompletedTask;
+    }),
     ("Brightness reads live hardware and only displays confirmed changes", async () =>
     {
         var f = new BrightnessFixture(); f.Engine.Step(-5); await f.Start();

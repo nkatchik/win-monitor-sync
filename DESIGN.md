@@ -6,7 +6,7 @@ No custom driver will be developed. Use an ordinary application and the existing
 
 ## Requirements
 
-- Windows Quick Settings volume controls monitor volume. Fixed brightness shortcuts control the screen under the cursor and show a Windows-style indicator.
+- Windows Quick Settings volume controls monitor volume. Brightness media keys control the screen under the cursor and show a Windows-style indicator; fixed shortcuts remain a fallback.
 - Volume should feel like one control. Choose the tradeoff between equal Windows/monitor percentages and the combined volume curve; do not introduce a custom driver to bypass Windows attenuation.
 - No custom audio or display driver, virtual audio routing, or audio-processing bridge.
 - Monitor-button volume changes flow back into Windows after readback. Brightness reads the current hardware value at the start of each key burst.
@@ -83,7 +83,11 @@ Twinkle Tray's project documentation likewise reports no official API for modify
 
 The target desktop reports `Not supported` for `WmiMonitorBrightness` and `WmiMonitorBrightnessMethods`. The user therefore chose direct monitor control with on-screen feedback that resembles Windows. A laptop panel's native slider is not forwarded to an external monitor, and no native Quick Settings integration is claimed.
 
-**Ctrl+Alt+Page Up / Page Down** changes brightness by 5%. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 100 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
+**Screen-brightness up/down media keys** change brightness by 5%; **Ctrl+Alt+Page Up / Page Down** remains a fallback. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 100 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The indicator displays the last verified value with a subdued appearance while a change is pending; failed or unconfirmed operations show “Brightness unavailable.” It does not retry a failed write automatically or restore saved brightness at launch.
+
+Media-key input uses background Raw Input for the Consumer Control collection and the Windows HID parser for display-brightness usages `0x6F` and `0x70` on page `0x0C`. Ordinary typing, volume, and keyboard-backlight usages do not trigger brightness. Key state is tracked separately for each device and report ID; holding starts repeat after 400 ms, then every 100 ms. Device removal, suspend, and topology changes clear repeats. No input history is stored. [Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/about-raw-input), [HID parsing](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_getusages), [USB usage definitions](https://www.usb.org/sites/default/files/hut1_21_0.pdf)
+
+Raw Input observes reports and does not suppress Windows or OEM brightness handling. Fn keys consumed by firmware or vendor software may not produce these reports; keyboard-specific compatibility requires a physical key test. The initial target is this desktop's external Dell, where native WMI brightness is unavailable. Native panel behavior on laptops remains unvalidated.
 
 The noninteractive indicator has a sun icon, level bar, percentage, rounded corners, and Windows light/dark colours. It appears at the bottom centre of the target's work area, scales with that display's DPI, and fades after about two seconds. It neither activates nor appears in the taskbar and lets mouse input pass through. High contrast uses system colours and disables the shadow and animation. The tray remains the only place for configuration.
 

@@ -15,6 +15,7 @@ public partial class App : System.Windows.Application
     private DdcClient? _ddc;
     private BrightnessController? _brightness;
     private BrightnessHotkeys? _brightnessHotkeys;
+    private BrightnessMediaKeys? _brightnessMediaKeys;
     private bool _exiting;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -59,7 +60,8 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new Forms.ContextMenuStrip();
-        var brightnessHint = new Forms.ToolStripMenuItem("Brightness: Ctrl+Alt+Page Up / Page Down") { Enabled = false };
+        var brightnessHint = new Forms.ToolStripMenuItem("Brightness: use your screen-brightness keys")
+        { Enabled = false, ToolTipText = "Fallback: Ctrl+Alt+Page Up / Page Down" };
         menu.Items.AddRange([_statusItem, _levelsItem, brightnessHint, new Forms.ToolStripSeparator(),
             _startupItem, new Forms.ToolStripSeparator()]);
         menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
@@ -72,12 +74,23 @@ public partial class App : System.Windows.Application
         _controller.Changed += (_, _) => UpdateStatus();
         try
         {
+            _brightnessMediaKeys = new BrightnessMediaKeys();
+            _brightnessMediaKeys.Step += delta => _brightness.Adjust(delta);
+        }
+        catch (Exception error)
+        {
+            brightnessHint.Text = "Brightness: Ctrl+Alt+Page Up / Page Down";
+            SettingsStore.Log(error.ToString());
+        }
+        try
+        {
             _brightnessHotkeys = new BrightnessHotkeys();
             _brightnessHotkeys.Step += delta => _brightness.Adjust(delta);
         }
         catch (Exception error)
         {
-            brightnessHint.Text = "Brightness shortcuts unavailable (already in use)";
+            if (_brightnessMediaKeys is null) brightnessHint.Text = "Brightness keys unavailable";
+            brightnessHint.ToolTipText = "Fallback shortcuts unavailable (already in use)";
             SettingsStore.Log(error.ToString());
         }
         UpdateStatus();
@@ -105,6 +118,7 @@ public partial class App : System.Windows.Application
 
     private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() =>
     {
+        _brightnessMediaKeys?.Reset();
         _brightness?.Invalidate();
         _controller?.TopologyChanged();
     });
@@ -113,6 +127,7 @@ public partial class App : System.Windows.Application
         if (e.Mode is PowerModes.Suspend or PowerModes.Resume)
             Dispatcher.InvokeAsync(() =>
             {
+                _brightnessMediaKeys?.SetSuspended(e.Mode == PowerModes.Suspend);
                 _brightness?.SetSuspended(e.Mode == PowerModes.Suspend);
                 _controller?.SetSuspended(e.Mode == PowerModes.Suspend);
             });
@@ -122,6 +137,7 @@ public partial class App : System.Windows.Application
     {
         if (_exiting) return;
         _exiting = true;
+        _brightnessMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         await Task.WhenAll(_brightness?.CloseAsync() ?? Task.CompletedTask,
             _controller?.CloseAsync() ?? Task.CompletedTask);
@@ -132,6 +148,7 @@ public partial class App : System.Windows.Application
     {
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
+        _brightnessMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         _brightness?.Dispose();
         _controller?.Dispose();

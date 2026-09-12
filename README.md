@@ -13,7 +13,7 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. Initial
 - Volume follows the currently selected Windows playback output when it is a supported monitor. Switching to headphones suspends monitor control; returning to monitor speakers resumes it. Cursor position does not select the audio target.
 - Windows mute and individual application volumes are preserved. Monitor hardware mute is not synchronized.
 - The app runs entirely in the notification area. Its only setting is **Start with Windows**, enabled by default; the tray also shows sync status and an **Exit** action.
-- **Ctrl+Alt+Page Up / Page Down** adjusts brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold the shortcut to keep adjusting.
+- Your keyboard's **screen-brightness up/down keys** adjust brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold a key to keep adjusting. **Ctrl+Alt+Page Up / Page Down** remains available as a fallback.
 - A temporary brightness indicator appears at the bottom centre of that screen, follows the Windows light/dark theme, and fades away without taking focus. The displayed percentage comes from monitor readback.
 - There is no settings window, pairing step, or pause switch. Brightness bypasses the native Windows slider; the indicator is provided by this app.
 
@@ -27,7 +27,7 @@ This is simple percentage synchronization. Windows and monitor attenuation both 
 2. Set both volumes to comfortable levels. Extract the complete preview ZIP into a folder and run `MonitorSync.exe`; keep the worker and runtime files together.
 3. Sync starts in the tray without opening a window. Right-click its icon to check the status or change **Start with Windows**.
 4. Try Windows Quick Settings and volume keys, then the Dell's volume buttons. Allow up to five seconds for monitor-button changes to appear in Windows.
-5. Move the pointer onto the screen you want to adjust and press **Ctrl+Alt+Page Up** (brighter) or **Ctrl+Alt+Page Down** (dimmer). The tray menu includes a reminder of the shortcuts. If another app has already registered them, it reports that the shortcuts are unavailable.
+5. Move the pointer onto the screen you want to adjust and press its **brightness up/down media keys**. Standard HID display-brightness keys are supported; keyboard-backlight keys are different. Fn keys handled entirely by firmware or vendor software may not reach the app. The fallback is **Ctrl+Alt+Page Up / Page Down**, also shown in the tray hint's tooltip.
 
 Use **Exit** in the tray to stop the app. It leaves current volumes in place and starts syncing again on the next launch. Turning off **Start with Windows** is remembered across launches and upgrades; it does not stop the current session. Old saved pairing and pause settings are no longer used.
 
