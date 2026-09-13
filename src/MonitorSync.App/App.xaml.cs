@@ -1,5 +1,4 @@
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using Microsoft.Win32;
@@ -11,16 +10,16 @@ public partial class App : System.Windows.Application
 {
     private Mutex? _instance;
     private Forms.NotifyIcon? _tray;
-    private Forms.ToolStripMenuItem? _activeItem, _startupItem;
-    private TraySliders? _sliders;
+    private TrayFlyout? _flyout;
     private SyncController? _controller;
     private DdcClient? _ddc;
     private BrightnessController? _brightness;
     private BrightnessHotkeys? _brightnessHotkeys;
     private BrightnessMediaKeys? _brightnessMediaKeys;
     private VolumeMediaKeys? _volumeMediaKeys;
-    private bool _active, _suspended, _exiting;
-    private Task _stopTask = Task.CompletedTask;
+    private bool _brightnessActive, _volumeActive, _suspended, _exiting, _updatingPreferences;
+    private Task _applyTask = Task.CompletedTask;
+    private Task _brightnessStopTask = Task.CompletedTask, _volumeStopTask = Task.CompletedTask;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -46,70 +45,110 @@ public partial class App : System.Windows.Application
         _instance = new Mutex(true, @"Local\MonitorSync.SingleInstance", out var created);
         if (!created) { Shutdown(); return; }
 
-        Forms.Application.EnableVisualStyles();
-        _activeItem = new Forms.ToolStripMenuItem("Active");
-        _activeItem.Click += async (_, _) =>
+        _flyout = new TrayFlyout();
+        async void ActiveChanged(object sender, RoutedEventArgs args)
         {
-            _activeItem.Enabled = false;
+            if (_updatingPreferences || _exiting) return;
+            var brightness = ReferenceEquals(sender, _flyout.Brightness.Active);
+            if (brightness) _brightnessActive = _flyout.Brightness.Active.IsChecked == true;
+            else _volumeActive = _flyout.Volume.Active.IsChecked == true;
             try
             {
-                await SetActiveAsync(!_active);
-                SettingsStore.Active = _active;
+                if (brightness) SettingsStore.BrightnessActive = _brightnessActive;
+                else SettingsStore.VolumeActive = _volumeActive;
             }
             catch (Exception error) { SettingsStore.Log(error.ToString()); }
-            finally { if (!_exiting) _activeItem.Enabled = true; }
-        };
-        _startupItem = new Forms.ToolStripMenuItem("Start with Windows");
+            try { await ApplyMonitoringAsync(); }
+            catch (Exception error) { SettingsStore.Log(error.ToString()); }
+        }
+        _flyout.Brightness.Active.Checked += ActiveChanged;
+        _flyout.Brightness.Active.Unchecked += ActiveChanged;
+        _flyout.Volume.Active.Checked += ActiveChanged;
+        _flyout.Volume.Active.Unchecked += ActiveChanged;
         try { SettingsStore.InitializeStartup(); }
         catch (Exception error) { SettingsStore.Log(error.ToString()); }
         UpdateStartupItem();
-        _startupItem.Click += (_, _) =>
+        void StartupChanged(object sender, RoutedEventArgs args)
         {
-            try { SettingsStore.StartsWithWindows = !SettingsStore.StartsWithWindows; }
+            if (_updatingPreferences || _exiting) return;
+            try { SettingsStore.StartsWithWindows = _flyout.StartupItem.IsChecked == true; }
             catch (Exception error) { SettingsStore.Log(error.ToString()); }
             UpdateStartupItem();
-        };
+        }
+        _flyout.StartupItem.Checked += StartupChanged;
+        _flyout.StartupItem.Unchecked += StartupChanged;
 
-        var menu = new Forms.ContextMenuStrip();
-        menu.Items.AddRange([new Forms.ToolStripSeparator(), _activeItem,
-            _startupItem, new Forms.ToolStripSeparator()]);
-        _sliders = new TraySliders(menu);
-        menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
-        menu.Opening += (_, _) => UpdateStartupItem();
+        _flyout.ExitItem.Click += async (_, _) => await ExitAsync();
         _tray = new Forms.NotifyIcon
         {
             Icon = System.Drawing.SystemIcons.Application,
-            Text = "Monitor Sync", Visible = true, ContextMenuStrip = menu
+            Text = "Monitor Sync", Visible = true
         };
-        _tray.MouseClick += (_, args) =>
+        _tray.MouseUp += (_, args) =>
         {
-            if (args.Button != Forms.MouseButtons.Left) return;
-            menu.Show(Forms.Cursor.Position);
-            // Give the popup focus so keyboard navigation and outside-click dismissal work.
-            SetForegroundWindow(menu.Handle);
+            if (_exiting || args.Button is not (Forms.MouseButtons.Left or Forms.MouseButtons.Right)) return;
+            UpdateStartupItem();
+            _flyout.ShowAtCursor();
         };
         SystemEvents.DisplaySettingsChanged += DisplayChanged;
         SystemEvents.PowerModeChanged += PowerChanged;
-        var active = true;
-        try { active = SettingsStore.Active; }
-        catch (Exception error) { SettingsStore.Log(error.ToString()); }
-        await SetActiveAsync(active);
+        _brightnessActive = ReadActive(() => SettingsStore.BrightnessActive);
+        _volumeActive = ReadActive(() => SettingsStore.VolumeActive);
+        _updatingPreferences = true;
+        try
+        {
+            _flyout.Brightness.Active.IsChecked = _brightnessActive;
+            _flyout.Volume.Active.IsChecked = _volumeActive;
+        }
+        finally { _updatingPreferences = false; }
+        await ApplyMonitoringAsync();
     }
 
-    private Task SetActiveAsync(bool active)
+    private static bool ReadActive(Func<bool> read)
     {
-        if (_exiting || _active == active) return Task.CompletedTask;
-        _active = active;
-        if (_activeItem is not null) _activeItem.Checked = active;
-        if (!active) return StopMonitoringAsync();
+        try { return read(); }
+        catch (Exception error) { SettingsStore.Log(error.ToString()); return true; }
+    }
 
-        _ddc = new DdcClient();
-        _controller = new SyncController(_ddc);
-        _brightness = new BrightnessController(_ddc);
-        _controller.SetSuspended(_suspended);
+    private Task ApplyMonitoringAsync()
+    {
+        // Stop the unchecked feature immediately, even if the other feature is
+        // still draining cancellation. Checkboxes remain usable throughout.
+        if (!_brightnessActive) StopBrightness();
+        if (!_volumeActive) StopVolume();
+        _flyout?.SetControllers(_controller, _brightness);
+        if (!_applyTask.IsCompleted) return _applyTask;
+        return _applyTask = ReconcileMonitoringAsync();
+    }
+
+    private async Task ReconcileMonitoringAsync()
+    {
+        while (true)
+        {
+            var brightnessStop = _brightnessStopTask;
+            var volumeStop = _volumeStopTask;
+            await Task.WhenAll(brightnessStop, volumeStop);
+            if (brightnessStop != _brightnessStopTask || volumeStop != _volumeStopTask) continue;
+
+            // Read the latest choices after draining: a quick off/on/off must
+            // neither recreate an unchecked controller nor replay its old input.
+            if (_exiting || (!_brightnessActive && !_volumeActive))
+            {
+                _ddc?.Dispose(); _ddc = null;
+                return;
+            }
+            _ddc ??= new DdcClient();
+            if (_brightnessActive && _brightness is null) StartBrightness(_ddc);
+            if (_volumeActive && _controller is null) StartVolume(_ddc);
+            _flyout?.SetControllers(_controller, _brightness);
+            return;
+        }
+    }
+
+    private void StartBrightness(DdcClient ddc)
+    {
+        _brightness = new BrightnessController(ddc);
         _brightness.SetSuspended(_suspended);
-        try { _volumeMediaKeys = new VolumeMediaKeys(_controller.TryQueueVolumeKey); }
-        catch (Exception error) { SettingsStore.Log(error.ToString()); }
         try
         {
             _brightnessMediaKeys = new BrightnessMediaKeys();
@@ -129,54 +168,55 @@ public partial class App : System.Windows.Application
         {
             SettingsStore.Log(error.ToString());
         }
-        _sliders?.SetControllers(_controller, _brightness);
-        _controller.Start(_volumeMediaKeys is not null);
-        return Task.CompletedTask;
     }
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(IntPtr window);
+    private void StartVolume(DdcClient ddc)
+    {
+        _controller = new SyncController(ddc);
+        _controller.SetSuspended(_suspended);
+        try { _volumeMediaKeys = new VolumeMediaKeys(_controller.TryQueueVolumeKey); }
+        catch (Exception error) { SettingsStore.Log(error.ToString()); }
+        _controller.Start(_volumeMediaKeys is not null);
+    }
 
     private void UpdateStartupItem()
     {
-        if (_startupItem is null) return;
-        try { _startupItem.Checked = SettingsStore.StartsWithWindows; _startupItem.Enabled = true; }
-        catch (Exception error) { _startupItem.Enabled = false; SettingsStore.Log(error.ToString()); }
+        if (_flyout is null) return;
+        try { SetChecked(_flyout.StartupItem, SettingsStore.StartsWithWindows); _flyout.StartupItem.IsEnabled = true; }
+        catch (Exception error) { _flyout.StartupItem.IsEnabled = false; SettingsStore.Log(error.ToString()); }
     }
 
-    private Task StopMonitoringAsync()
+    private void SetChecked(System.Windows.Controls.MenuItem item, bool value)
     {
-        if (!_stopTask.IsCompleted) return _stopTask;
-        _sliders?.SetControllers(null, null);
+        _updatingPreferences = true;
+        try { item.IsChecked = value; }
+        finally { _updatingPreferences = false; }
+    }
+
+    private void StopVolume()
+    {
+        var controller = _controller;
+        _controller = null;
         _volumeMediaKeys?.Dispose(); _volumeMediaKeys = null;
+        if (controller is null) return;
+        controller.SetSuspended(true);
+        _volumeStopTask = controller.CloseAsync();
+    }
+
+    private void StopBrightness()
+    {
+        var brightness = _brightness;
+        _brightness = null;
         _brightnessMediaKeys?.Dispose(); _brightnessMediaKeys = null;
         _brightnessHotkeys?.Dispose(); _brightnessHotkeys = null;
-        var brightness = _brightness;
-        var controller = _controller;
-        var ddc = _ddc;
-        _brightness = null;
-        _controller = null;
-        _ddc = null;
-        // Reject queued input immediately, then drain cancellation before releasing the worker.
-        brightness?.SetSuspended(true);
-        controller?.SetSuspended(true);
-        return _stopTask = CloseMonitoringAsync(brightness, controller, ddc);
-    }
-
-    private static async Task CloseMonitoringAsync(BrightnessController? brightness, SyncController? controller, DdcClient? ddc)
-    {
-        try
-        {
-            await Task.WhenAll(brightness?.CloseAsync() ?? Task.CompletedTask,
-                controller?.CloseAsync() ?? Task.CompletedTask);
-        }
-        finally { ddc?.Dispose(); }
+        if (brightness is null) return;
+        brightness.SetSuspended(true);
+        _brightnessStopTask = brightness.CloseAsync();
     }
 
     private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() =>
     {
-        if (!_active || _exiting) return;
+        if (_exiting) return;
         _brightnessMediaKeys?.Reset();
         _brightness?.Invalidate();
         _controller?.TopologyChanged();
@@ -187,7 +227,7 @@ public partial class App : System.Windows.Application
             Dispatcher.InvokeAsync(() =>
             {
                 _suspended = e.Mode == PowerModes.Suspend;
-                if (!_active || _exiting) return;
+                if (_exiting) return;
                 _brightnessMediaKeys?.SetSuspended(_suspended);
                 _brightness?.SetSuspended(_suspended);
                 _controller?.SetSuspended(_suspended);
@@ -198,9 +238,10 @@ public partial class App : System.Windows.Application
     {
         if (_exiting) return;
         _exiting = true;
-        _active = false;
-        await StopMonitoringAsync();
-        _sliders?.Dispose();
+        _brightnessActive = _volumeActive = false;
+        if (_flyout is not null) _flyout.IsOpen = false;
+        await ApplyMonitoringAsync();
+        _flyout?.Dispose();
         Shutdown();
     }
 
@@ -208,16 +249,14 @@ public partial class App : System.Windows.Application
     {
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
-        _sliders?.Dispose();
+        _flyout?.Dispose();
         _brightnessMediaKeys?.Dispose();
         _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         _brightness?.Dispose();
         _controller?.Dispose();
         _ddc?.Dispose();
-        var menu = _tray?.ContextMenuStrip;
         _tray?.Dispose();
-        menu?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);
     }

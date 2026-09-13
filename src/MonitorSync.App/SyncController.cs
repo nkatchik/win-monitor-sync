@@ -140,6 +140,9 @@ public sealed class SyncController : IDisposable
                 _engine = null;
                 _audio = null;
                 _muteRequests = 0;
+                // Publish loss of availability after clearing the failed connection,
+                // including when brightness polling is disabled.
+                Changed?.Invoke(this, EventArgs.Empty);
             }
 
             try { await Task.Delay(retryDelay, token); }
@@ -148,7 +151,11 @@ public sealed class SyncController : IDisposable
         }
     }
 
-    public void TopologyChanged() => _connection?.Cancel();
+    public void TopologyChanged()
+    {
+        _connection?.Cancel();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     public void SetSuspended(bool suspended)
     {

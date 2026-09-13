@@ -7,14 +7,14 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
 {
     private readonly List<(int Value, bool Absolute)> _initialInput = [];
     private VolumeReading _confirmed;
-    private bool _started, _dirty;
+    private bool _started, _dirty, _writing;
     private int _desired, _confirmationReads;
     private uint? _expected;
     private long _writeDue, _confirmDue;
 
     public int Percent => _confirmed.Percent;
     public bool HasReading => _started;
-    public bool IsPending => !_started || _dirty || _expected.HasValue;
+    public bool IsPending => !_started || _dirty || _writing || _expected.HasValue;
 
     public void Step(int delta)
     {
@@ -67,12 +67,18 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
             var desired = _desired;
             var raw = _confirmed.RawFor(desired);
             _dirty = false;
-            await monitor.WriteAsync(raw, token);
-            Guard(token);
-            if (_dirty || _desired != desired) return;
-            _expected = raw;
-            _confirmationReads = 0;
-            _confirmDue = milliseconds() + 200;
+            // Stay pending between dequeueing the request and awaiting readback.
+            _writing = true;
+            try
+            {
+                await monitor.WriteAsync(raw, token);
+                Guard(token);
+                if (_dirty || _desired != desired) return;
+                _expected = raw;
+                _confirmationReads = 0;
+                _confirmDue = milliseconds() + 200;
+            }
+            finally { _writing = false; }
             return;
         }
         if (_expected is not uint expected || milliseconds() < _confirmDue) return;

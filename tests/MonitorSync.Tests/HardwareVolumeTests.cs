@@ -4,6 +4,64 @@ static class HardwareVolumeTests
 {
     public static readonly (string Name, Func<Task> Run)[] Cases =
     [
+        ("Volume remains pending throughout a delayed write and confirmation", async () =>
+        {
+            var f = new Fixture(60); await f.Start(); f.Engine.SetPercent(10);
+            var write = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            f.Monitor.OnWrite = () => write.Task;
+            var writing = f.Tick(20);
+            try
+            {
+                Equal(false, writing.IsCompleted); Equal(true, f.Engine.IsPending);
+                Equal(40, f.Engine.MonitorPercent); Equal(60, f.Audio.Percent);
+            }
+            finally { write.TrySetResult(); await writing; }
+            Equal(true, f.Engine.IsPending); Equal(40, f.Engine.MonitorPercent);
+            var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            f.Monitor.OnRead = () => read.Task;
+            var confirming = f.Tick(220);
+            try
+            {
+                Equal(false, confirming.IsCompleted); Equal(true, f.Engine.IsPending);
+                Equal(40, f.Engine.MonitorPercent); Equal(60, f.Audio.Percent);
+            }
+            finally { read.TrySetResult(); await confirming; }
+            Equal(false, f.Engine.IsPending); Equal(10, f.Engine.MonitorPercent); Equal(100, f.Audio.Percent);
+        }),
+        ("A superseded volume write stays pending until the latest slider value is confirmed", async () =>
+        {
+            var f = new Fixture(); await f.Start(); f.Engine.SetPercent(10);
+            f.Monitor.OnWrite = () =>
+            {
+                Equal(true, f.Engine.IsPending);
+                f.Engine.SetPercent(80);
+                return Task.CompletedTask;
+            };
+            await f.Tick(20); f.Monitor.OnWrite = null;
+            Equal(true, f.Engine.IsPending); Equal(40, f.Engine.MonitorPercent);
+            await f.Tick(40); Equal(true, f.Engine.IsPending);
+            await f.Tick(240); Equal(false, f.Engine.IsPending); Equal(80, f.Engine.MonitorPercent);
+        }),
+        ("Failed and canceled volume writes clear the in-flight state without confirming", async () =>
+        {
+            foreach (var cancel in new[] { false, true })
+            {
+                var f = new Fixture(60); await f.Start(); f.Engine.SetPercent(10);
+                using var cancellation = new CancellationTokenSource();
+                f.Monitor.OnWrite = () =>
+                {
+                    Equal(true, f.Engine.IsPending);
+                    if (!cancel) throw new IOException("Write failed");
+                    cancellation.Cancel();
+                    return Task.CompletedTask;
+                };
+                f.Now = 20;
+                if (cancel) await Throws<OperationCanceledException>(() => f.Engine.TickAsync(cancellation.Token));
+                else await Throws<IOException>(() => f.Engine.TickAsync(cancellation.Token));
+                Equal(false, f.Engine.IsPending); Equal(40, f.Engine.MonitorPercent); Equal(60, f.Audio.Percent);
+                Equal(0, f.Audio.Writes.Count);
+            }
+        }),
         ("Volume slider input coalesces to the latest absolute level within 20 ms", async () =>
         {
             var f = new Fixture(); await f.Start();

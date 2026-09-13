@@ -2,6 +2,61 @@ using MonitorSync.Core;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    ("Brightness remains pending throughout a delayed write and confirmation", async () =>
+    {
+        var f = new BrightnessFixture(); await f.Start(); f.Engine.SetPercent(80);
+        var write = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Monitor.OnWrite = () => write.Task;
+        var writing = f.Tick(20);
+        try
+        {
+            Equal(false, writing.IsCompleted); Equal(true, f.Engine.IsPending); Equal(40, f.Engine.Percent);
+        }
+        finally { write.TrySetResult(); await writing; }
+        Equal(true, f.Engine.IsPending); Equal(40, f.Engine.Percent);
+        var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Monitor.OnRead = () => read.Task;
+        var confirming = f.Tick(220);
+        try
+        {
+            Equal(false, confirming.IsCompleted); Equal(true, f.Engine.IsPending); Equal(40, f.Engine.Percent);
+        }
+        finally { read.TrySetResult(); await confirming; }
+        Equal(false, f.Engine.IsPending); Equal(80, f.Engine.Percent);
+    }),
+    ("A superseded brightness write stays pending until the latest slider value is confirmed", async () =>
+    {
+        var f = new BrightnessFixture(); await f.Start(); f.Engine.SetPercent(10);
+        f.Monitor.OnWrite = () =>
+        {
+            Equal(true, f.Engine.IsPending);
+            f.Engine.SetPercent(80);
+            return Task.CompletedTask;
+        };
+        await f.Tick(20); f.Monitor.OnWrite = null;
+        Equal(true, f.Engine.IsPending); Equal(40, f.Engine.Percent);
+        await f.Tick(40); Equal(true, f.Engine.IsPending);
+        await f.Tick(240); Equal(false, f.Engine.IsPending); Equal(80, f.Engine.Percent);
+    }),
+    ("Failed and canceled brightness writes clear the in-flight state without confirming", async () =>
+    {
+        foreach (var cancel in new[] { false, true })
+        {
+            var f = new BrightnessFixture(); await f.Start(); f.Engine.SetPercent(10);
+            using var cancellation = new CancellationTokenSource();
+            f.Monitor.OnWrite = () =>
+            {
+                Equal(true, f.Engine.IsPending);
+                if (!cancel) throw new IOException("Write failed");
+                cancellation.Cancel();
+                return Task.CompletedTask;
+            };
+            f.Now = 20;
+            if (cancel) await Throws<OperationCanceledException>(() => f.Engine.TickAsync(cancellation.Token));
+            else await Throws<IOException>(() => f.Engine.TickAsync(cancellation.Token));
+            Equal(false, f.Engine.IsPending); Equal(40, f.Engine.Percent);
+        }
+    }),
     ("Brightness sliders and keys preserve input order during the initial read", async () =>
     {
         var f = new BrightnessFixture(); f.Engine.Step(5); f.Engine.SetPercent(70);

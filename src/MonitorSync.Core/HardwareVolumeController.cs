@@ -8,12 +8,12 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
     private int _desired, _attempts;
     private long _writeDue, _confirmDue, _pollDue, _intent;
     private uint? _expected;
-    private bool _started, _dirty;
+    private bool _started, _dirty, _writing;
 
     public int WindowsPercent => _lastAudio.Percent;
     public int MonitorPercent => _confirmed.Percent;
     public bool Muted => _lastAudio.Muted;
-    public bool IsPending => _dirty || _expected.HasValue;
+    public bool IsPending => _dirty || _writing || _expected.HasValue;
 
     public async Task StartAsync(CancellationToken token)
     {
@@ -60,13 +60,20 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
             var intent = _intent;
             var raw = _confirmed.RawFor(_desired);
             _dirty = false;
-            await monitor.WriteAsync(raw, token);
-            token.ThrowIfCancellationRequested();
-            Observe(audio.Capture());
-            if (_intent != intent) return;
-            _expected = raw;
-            _attempts = 0;
-            _confirmDue = milliseconds() + 200;
+            // Clearing the queued request must not expose stale readback as settled
+            // while the write is waiting for the DDC worker or monitor.
+            _writing = true;
+            try
+            {
+                await monitor.WriteAsync(raw, token);
+                token.ThrowIfCancellationRequested();
+                Observe(audio.Capture());
+                if (_intent != intent) return;
+                _expected = raw;
+                _attempts = 0;
+                _confirmDue = milliseconds() + 200;
+            }
+            finally { _writing = false; }
             return;
         }
         if (_expected is uint expected)

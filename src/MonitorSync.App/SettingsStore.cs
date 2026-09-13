@@ -9,18 +9,29 @@ public static class SettingsStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MonitorSync");
     private static readonly object LogGate = new();
 
-    public static bool Active
+    public static bool BrightnessActive
     {
-        get
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\MonitorSync");
-            return key?.GetValue("Active") is not int value || value != 0;
-        }
-        set
-        {
-            using var key = Registry.CurrentUser.CreateSubKey(@"Software\MonitorSync");
-            key.SetValue("Active", value ? 1 : 0, RegistryValueKind.DWord);
-        }
+        get => GetActive(nameof(BrightnessActive));
+        set => SetActive(nameof(BrightnessActive), value);
+    }
+
+    public static bool VolumeActive
+    {
+        get => GetActive(nameof(VolumeActive));
+        set => SetActive(nameof(VolumeActive), value);
+    }
+
+    private static bool GetActive(string name)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\MonitorSync");
+        // Preserve the previous global opt-out until each feature has its own preference.
+        return (key?.GetValue(name) ?? key?.GetValue("Active")) is not int value || value != 0;
+    }
+
+    private static void SetActive(string name, bool active)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(@"Software\MonitorSync");
+        key.SetValue(name, active ? 1 : 0, RegistryValueKind.DWord);
     }
 
     public static void InitializeStartup()

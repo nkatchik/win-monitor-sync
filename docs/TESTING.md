@@ -107,6 +107,14 @@ Reports and traces are in ignored `artifacts/debug`.
 - Inactive startup and menu opening created no controllers, keyboard listeners, polling timer, or DDC worker. Disabling during queued volume and keyboard-brightness adjustments canceled both before writing, closed the brightness indicator, released the volume hook and HID listener, and made both fallback shortcuts available to another window. Windows output, gain, mute, and the Dell's volume/brightness readings were preserved.
 - The inactive app stayed stopped for six seconds with the menu open after simulated display-change and resume events. Re-enabling created fresh controllers and read current levels without replaying canceled input. Disabling also drained an in-flight read-only tray brightness probe. The harness restored the original startup and Active preferences. Trace: ignored `artifacts/debug/active-smoke.txt`.
 
+### WPF Fluent popup, 13 September 2026
+
+- Replaced the WinForms menu/trackbars with standard WPF Fluent sliders, checkboxes, separators, and an Exit button. The popup defaults to the system theme, uses framework accent colours, and remains hidden at launch and absent from the taskbar/Alt+Tab. The notification icon remains WinForms.
+- Debug build passed with zero warnings/errors; **64/64 deterministic control tests passed**. Live popup checks verified both tray mouse-up callbacks, focus, Tab navigation, Escape dismissal, outside-focus dismissal, reopening after Close, bounds at 150% DPI, framework Fluent slider templates, and UI Automation range/toggle patterns. Light/dark rendering and theme changes while open were checked without changing Windows' global theme setting. The final 320 × 271 DIP layout and disabled appearance were inspected separately.
+- The Fluent volume slider produced confirmed Dell readback and kept Windows at 100%. Native arrow-key messages adjusted brightness, and routed thumb-drag events verified capture, pending-value retention, and confirmed hardware adjustment without dismissing the popup. Slider input created no additional overlay. Both hardware levels were restored afterward.
+- UI Automation toggled Active and Start with Windows through their real checkbox state handlers. Active off disabled both sliders, canceled queued input, stopped polling/the worker, and remained inactive through a simulated resume. Re-enabling used fresh controllers and live readings. Startup and Active preferences were restored after the harness.
+- Traces and renders are under ignored `artifacts/debug/fluent-*`. Physical mouse drags, mixed-DPI/multiple-display placement, high contrast, and full screen-reader navigation remain interactive checks. No global keyboard or mouse input was injected.
+
 ### Remaining interactive checks
 
 Record the Windows build, GPU model/driver, connector/cable, active monitor input, audio endpoint, HDR state, and a diagnostic report for each run. Use direct HDMI first, then direct DisplayPort. Keep the initial listening level comfortable; compare percentages separately from perceived loudness.
@@ -144,6 +152,25 @@ A successful DDC write reply is not sufficient: check the monitor's displayed va
 Brightness now bypasses the native Windows slider by design. It uses DDC directly and provides its own temporary indicator.
 
 On multiple displays, verify that brightness targets only the screen under the cursor, even when audio plays through another monitor. Moving the cursor alone must not change brightness. An unsupported or ambiguous cursor target must produce no writes to any screen. Crossing to another screen or changing display topology during a pending adjustment must discard stale commands and readback. These remain hardware acceptance requirements; the corresponding engine guards are covered by deterministic tests.
+
+### Fluent context menu, 13 September 2026
+
+- Replaced the panel window and Exit button with an actual WPF ContextMenu, checkmarked Active/startup commands, and a standard Exit row. Inspected the 280 × 253 DIP menu in light and dark themes at 150% DPI; changing the application theme while the standalone menu was open updated its framework colours.
+- Debug build passed with zero warnings/errors; **64/64 deterministic control tests passed**. Desktop checks passed for both tray callbacks, keyboard focus and Tab navigation, Escape, outside-focus dismissal, reopening, work-area bounds, no taskbar/Alt+Tab entry, and UI Automation toggle/range semantics.
+- Verified volume adjustment and brightness arrow-key input with DDC readback. Actual mouse-down, movement, and release dragged the brightness thumb and kept the context menu open; slider input created no extra overlay. Active/startup commands kept the menu open. Active off disabled the sliders and stopped polling and the worker; resume while off did not restart monitoring, and re-enabling read fresh levels. Captured monitor levels, preferences, pointer position, and foreground window were restored afterward.
+
+### Slider position during DDC writes, 13 September 2026
+
+- Fixed a gap in both engines' pending state between taking a queued request and completing its asynchronous DDC write. The volume menu could refresh the old confirmed value after mouse release during that gap. Pending now covers the write as well as its confirmation, with cleanup on failure/cancellation.
+- Added six regression cases covering delayed writes and reads, superseding slider input, and failed/canceled writes for both engines. All six failed against the old implementation; the Debug solution build passed with zero warnings/errors and **70/70 tests passed** after the fix. Windows volume remains unchanged until matching readback confirms the requested monitor volume.
+- An isolated desktop harness used the production WPF slider and core engines with simulated, deliberately delayed DDC. Actual mouse drags reproduced a return from 92% to 40% with the old volume engine. With the fix, fast drags to 92% volume and 10% brightness retained both the thumb and label through delayed writes and readback, then settled to confirmed values without dismissing the menu. This check made no hardware changes and restored the pointer and foreground window.
+
+### Independent brightness and volume activation, 13 September 2026
+
+- Brightness is first. Each control has a Fluent checkbox beside its name; the global Active command is removed. Inspected enabled and unavailable states in light/dark themes: unavailable names and sliders are dimmed, percentages are cleared, and checkboxes retain their normal appearance and remain enabled.
+- Debug solution build passed with zero warnings/errors; **70/70 core tests passed**. An isolated production-app harness with a simulated DDC worker exercised all four activation combinations, per-feature persistence, default-on settings, and migration of the previous global opt-out. Native Space/Tab input and a mouse click on an unavailable control's checkbox passed, as did UI Automation toggles and accessible checkbox naming.
+- Simulated failed DDC reads/writes disabled affected sliders while preserving checked preferences and usable checkboxes. Volume published unavailable state after failure, including with brightness off. Recovery re-enabled sliders without changing preferences. Turning brightness off during a delayed volume write retained the same volume controller and allowed confirmation to complete.
+- Rapid off/on/off toggles during DDC work honored the final choice, rejected input to the stopped controller, and preserved the other feature. With both off, the shared worker and menu polling stopped; reopening and resume generated no DDC requests. Re-enabling brightness alone used a fresh controller without starting volume. The harness changed no real monitor levels, verified the actual Windows output/volume/mute were unchanged, and restored preferences, startup entry, pointer, and foreground window.
 
 ## Windows installer and distribution
 
