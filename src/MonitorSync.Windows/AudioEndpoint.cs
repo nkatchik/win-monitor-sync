@@ -42,7 +42,7 @@ public sealed class AudioEndpoint : IAudioVolume, IDisposable
         catch { Release(_enumerator); throw; }
     }
 
-    // Safe for an input hook: no COM or device I/O. A route change invalidates this instance permanently.
+    // Availability checks need no COM or device I/O. Route changes invalidate this instance permanently.
     public bool IsCurrentRoute => !_disposed && _route.IsCurrent;
 
     public bool TryToggleMute(AudioSnapshot expected)

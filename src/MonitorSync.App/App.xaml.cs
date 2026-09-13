@@ -16,7 +16,6 @@ public partial class App : System.Windows.Application
     private BrightnessController? _brightness;
     private BrightnessHotkeys? _brightnessHotkeys;
     private BrightnessMediaKeys? _brightnessMediaKeys;
-    private VolumeMediaKeys? _volumeMediaKeys;
     private bool _brightnessActive, _volumeActive, _suspended, _exiting, _updatingPreferences;
     private Task _applyTask = Task.CompletedTask;
     private Task _brightnessStopTask = Task.CompletedTask, _volumeStopTask = Task.CompletedTask;
@@ -174,9 +173,7 @@ public partial class App : System.Windows.Application
     {
         _controller = new SyncController(ddc);
         _controller.SetSuspended(_suspended);
-        try { _volumeMediaKeys = new VolumeMediaKeys(_controller.TryQueueVolumeKey); }
-        catch (Exception error) { SettingsStore.Log(error.ToString()); }
-        _controller.Start(_volumeMediaKeys is not null);
+        _controller.Start();
     }
 
     private void UpdateStartupItem()
@@ -197,7 +194,6 @@ public partial class App : System.Windows.Application
     {
         var controller = _controller;
         _controller = null;
-        _volumeMediaKeys?.Dispose(); _volumeMediaKeys = null;
         if (controller is null) return;
         controller.SetSuspended(true);
         _volumeStopTask = controller.CloseAsync();
@@ -251,7 +247,6 @@ public partial class App : System.Windows.Application
         SystemEvents.PowerModeChanged -= PowerChanged;
         _flyout?.Dispose();
         _brightnessMediaKeys?.Dispose();
-        _volumeMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
         _brightness?.Dispose();
         _controller?.Dispose();

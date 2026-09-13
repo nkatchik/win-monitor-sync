@@ -123,17 +123,17 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | --- | --- |
 | Command-line diagnostics | Reports live Windows and monitor values; changes neither values nor startup preference |
 | Windows volume change with the app exited | Establish whether monitor OSD already follows it; if it does, investigate existing hardware integration before adding duplicate control |
-| Launch with unequal values | Confirm the lower monitor setting before restoring Windows to 100%; if Windows is already 100%, preserve live monitor volume |
-| Volume media keys | Monitor changes by 2%, Windows stays at 100%, and the app creates no volume overlay; confirmed volume appears in tray status |
+| Launch with unequal values | Align both to the lower live percentage; newer Windows input during discovery wins; upgrading from Windows 100% never forces the monitor to maximum |
+| Volume media keys | Windows handles the keys and its usual indicator; monitor follows the Windows percentage through DDC; the app creates no volume overlay |
 | Tray sliders | Both rows remain visible; available controls show percentages and unavailable controls are disabled; dragging/arrow keys adjust the intended monitor and keep the menu open |
 | Active checkbox | Turning off cancels pending work, releases shortcuts/hooks, stops the worker and polling, and preserves levels; saved inactivity survives launch and resume; re-enabling uses fresh readings |
-| Quick Settings | A new endpoint percentage is applied to hardware and Windows returns to 100% after confirmation; no reset feedback loop |
+| Quick Settings | Windows retains the requested percentage while hardware catches up; confirmed hardware quantization may align it to the nearest supported percentage; no reset to maximum |
 | Drag slider and hold volume key | Values make progress during continuous input; no feedback oscillation or late rollback |
-| Dell volume buttons | Tray monitor level follows within approximately five seconds while Windows stays at 100% |
-| Windows mute | Remains muted through monitor-volume updates; unmute still works normally |
+| Dell volume buttons | Windows and tray monitor levels follow within approximately five seconds without an echo write |
+| Windows mute | Sync preserves mute through monitor-volume updates; native volume and mute keys retain normal Windows behavior |
 | Per-app volume | Individual app settings remain unchanged |
 | Switch to headphones | Monitor sync suspends; headphone level is not copied from the Dell |
-| Switch back | Monitor is rediscovered automatically; Windows returns to 100% only after adoption succeeds |
+| Switch back | Monitor is rediscovered automatically; live percentages align to the lower value without restoring stale settings |
 | Exit | No further sync writes; normal Windows playback continues |
 | Sleep / wake / cable reconnect | Pending operations are canceled; live handles are recreated; stale requests do not alter a new output |
 | Different input / port | New endpoint and monitor are discovered automatically when descriptions match uniquely |
@@ -171,6 +171,15 @@ On multiple displays, verify that brightness targets only the screen under the c
 - Debug solution build passed with zero warnings/errors; **70/70 core tests passed**. An isolated production-app harness with a simulated DDC worker exercised all four activation combinations, per-feature persistence, default-on settings, and migration of the previous global opt-out. Native Space/Tab input and a mouse click on an unavailable control's checkbox passed, as did UI Automation toggles and accessible checkbox naming.
 - Simulated failed DDC reads/writes disabled affected sliders while preserving checked preferences and usable checkboxes. Volume published unavailable state after failure, including with brightness off. Recovery re-enabled sliders without changing preferences. Turning brightness off during a delayed volume write retained the same volume controller and allowed confirmation to complete.
 - Rapid off/on/off toggles during DDC work honored the final choice, rejected input to the stopped controller, and preserved the other feature. With both off, the shared worker and menu polling stopped; reopening and resume generated no DDC requests. Re-enabling brightness alone used a fresh controller without starting volume. The harness changed no real monitor levels, verified the actual Windows output/volume/mute were unchanged, and restored preferences, startup entry, pointer, and foreground window.
+
+### Matching Windows and monitor volume, 13 September 2026
+
+- Removed the volume keyboard hook and Windows-100% restoration. Windows handles volume/mute keys normally; Windows endpoint changes and the tray slider now request the same monitor percentage. Startup aligns to the lower live level unless newer Windows input supersedes discovery. Monitor-button readback mirrors back to Windows, and only confirmed hardware quantization corrects a pending Windows percentage.
+- Debug solution build passed with zero warnings/errors; **77/77 deterministic tests passed**. Updated volume cases cover immediate tray-to-Windows changes, 20 ms coalescing, startup migration, changes during discovery/write/readback, delayed callback revisions, both endpoint limits, hardware-to-Windows mirroring, mute preservation, route changes, cancellation, failures, and quantization without feedback loops.
+- An isolated WPF UI Automation check set volume to 92% and brightness to 10%, then released mouse capture during deliberately delayed writes. Both thumbs and labels retained their requested values through write and readback, then settled to confirmation. Physical mouse/keyboard injection was unreliable in this desktop session; this run does not establish physical drag or key delivery.
+- Live Dell checks started at Windows 100%, monitor 2%, brightness 100%, unmuted. Startup aligned Windows to 2%; the tray immediately set Windows to 1% and real DDC readback confirmed monitor 1%. A native endpoint request then reached monitor 2% while Windows remained 2%, with the tray menu staying open through its adjustment. The selected audio route changed during the subsequent direct-monitor/polling check, and the worker rejected further volume writes, including cleanup aimed at the old output. A separate cleanup verified the known Dell was still at the test-written 1% and restored its captured 2% through the generic monitor API, preserving the newly selected Steam Streaming Microphone output at 50%, unmuted. No output switch or Windows restoration was forced. Live monitor-button-to-Windows polling remains to be repeated; deterministic coverage passed.
+- Published binaries matched the built app, core, Windows adapter, and real DDC worker. Restarted the app with both controls enabled and the original startup entry intact. The selected output was not a monitor, so monitor volume sync remained idle; brightness remained 100%.
+- The broader per-item desktop harness checked defaults/migration and slider activation, but focus/menu dismissal prevented completing its full navigation/failure sequence in this session. The preceding independent-activation results remain historical validation. Traces are in ignored `artifacts/debug/matched-*`.
 
 ## Windows installer and distribution
 

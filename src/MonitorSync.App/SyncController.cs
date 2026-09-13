@@ -14,7 +14,6 @@ public sealed class SyncController : IDisposable
     private Task _runTask = Task.CompletedTask;
     private HardwareVolumeController? _engine;
     private AudioEndpoint? _audio;
-    private int _muteRequests;
     private bool _started, _suspended, _disposed;
     private string _status = "Finding monitor speakers…", _levels = "";
 
@@ -29,16 +28,18 @@ public sealed class SyncController : IDisposable
     public bool SetVolumePercent(int percent)
     {
         if (!CanControlVolume) return false;
-        _engine!.SetPercent(percent);
-        Changed?.Invoke(this, EventArgs.Empty);
-        return true;
-    }
-
-    public bool TryQueueVolumeKey(int delta)
-    {
-        if (!CanControlVolume) return false;
-        if (delta == 0) _muteRequests++; else _engine!.Step(delta);
-        return true;
+        try
+        {
+            _engine!.SetPercent(percent);
+            Changed?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+        catch (Exception error)
+        {
+            SettingsStore.Log(error.ToString());
+            TopologyChanged();
+            return false;
+        }
     }
 
     public SyncController(DdcClient? client = null)
@@ -47,11 +48,10 @@ public sealed class SyncController : IDisposable
         _ownsDdc = client is null;
     }
 
-    public void Start(bool volumeKeysAvailable = true)
+    public void Start()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_started) return;
-        if (!volumeKeysAvailable) { SetStatus("Volume keys unavailable — using Windows volume"); return; }
         _started = true;
         _runTask = RunAsync(_lifetime.Token);
     }
@@ -100,11 +100,6 @@ public sealed class SyncController : IDisposable
                             _engine = engine;
                             while (true)
                             {
-                                if (_muteRequests > 0)
-                                {
-                                    if ((_muteRequests & 1) != 0) audio.TryToggleMute(audio.Capture());
-                                    _muteRequests = 0;
-                                }
                                 await engine.TickAsync(token);
                                 token.ThrowIfCancellationRequested();
                                 SetStatus(engine.IsPending ? "Adjusting monitor volume…" : "Monitor volume control is on",
@@ -139,7 +134,6 @@ public sealed class SyncController : IDisposable
             {
                 _engine = null;
                 _audio = null;
-                _muteRequests = 0;
                 // Publish loss of availability after clearing the failed connection,
                 // including when brightness polling is disabled.
                 Changed?.Invoke(this, EventArgs.Empty);

@@ -1,6 +1,6 @@
 namespace MonitorSync.Core;
 
-/// <summary>Monitor gain is authoritative. Windows gain is restored only after confirmed DDC control.</summary>
+/// <summary>Matches Windows and monitor volume, preserving newer input during asynchronous DDC work.</summary>
 public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume monitor, Func<long> milliseconds)
 {
     private AudioSnapshot _lastAudio;
@@ -24,21 +24,20 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
         reading.Validate();
         var current = audio.Capture();
         GuardRoute(before, current);
+        // Adopt the lower live level, unless Windows changed during discovery.
+        // In particular, migrating from pinned Windows gain must not turn the monitor up to 100%.
+        if (current == before && current.Percent > reading.Percent)
+        {
+            audio.TrySetPercent(reading.Percent, current);
+            current = audio.Capture();
+            GuardRoute(before, current);
+        }
         _lastAudio = current;
         _confirmed = reading;
-        _desired = reading.Percent;
+        _desired = current.Percent;
         _started = true;
         _pollDue = milliseconds() + 5000;
-        // Confirm write support at the existing (or lower) setting before raising Windows gain.
-        if (current.Percent < 100) Queue(Math.Min(current.Percent, reading.Percent));
-    }
-
-    public void Step(int delta)
-    {
-        if (!_started) throw new InvalidOperationException("Read the monitor before accepting volume keys.");
-        if (delta is not (-2 or 2)) throw new ArgumentOutOfRangeException(nameof(delta));
-        var desired = Math.Clamp(_desired + delta, 0, 100);
-        if (desired != _desired) Queue(desired);
+        if (current.Percent != reading.Percent) Queue(current.Percent);
     }
 
     public void SetPercent(int percent)
@@ -46,7 +45,15 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
         if (!_started) throw new InvalidOperationException("Read the monitor before accepting volume input.");
         ArgumentOutOfRangeException.ThrowIfLessThan(percent, 0);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(percent, 100);
-        if (percent != _desired) Queue(percent);
+        Observe(audio.Capture());
+        // Explicit tray input changes Windows immediately; DDC confirmation
+        // only settles the hardware value.
+        if (percent != _lastAudio.Percent && audio.TrySetPercent(percent, _lastAudio))
+        {
+            _lastAudio = _lastAudio with { Percent = percent };
+            Queue(percent);
+        }
+        Observe(audio.Capture());
     }
 
     public async Task TickAsync(CancellationToken token)
@@ -95,37 +102,41 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
             _desired = reading.Percent;
             _expected = null;
             _pollDue = milliseconds() + 5000;
-            if (_lastAudio.Percent != 100)
-            {
-                // The compare-before-set preserves newer slider/mute/route changes during DDC I/O.
-                if (audio.TrySetPercent(100, _lastAudio))
-                    _lastAudio = _lastAudio with { Percent = 100 };
-                Observe(audio.Capture());
-                if (_lastAudio.Percent != 100 && !IsPending) Queue(_lastAudio.Percent);
-            }
+            MatchWindowsToConfirmed();
             return;
         }
         if (milliseconds() < _pollDue) return;
         var pollIntent = _intent;
+        var beforePoll = _lastAudio;
         var observed = await monitor.ReadAsync(token);
         token.ThrowIfCancellationRequested();
         CheckRange(observed);
         Observe(audio.Capture());
         _pollDue = milliseconds() + 5000;
-        if (_intent != pollIntent) return;
+        if (_intent != pollIntent || _lastAudio != beforePoll) return;
+        if (observed.Current == _confirmed.Current) return;
         _confirmed = observed;
         _desired = observed.Percent;
+        MatchWindowsToConfirmed();
     }
 
     private void Observe(AudioSnapshot current)
     {
         GuardRoute(_lastAudio, current);
-        // Native sliders and application endpoint writes become absolute hardware requests.
-        // Our own restoration to 100 must never become a request for maximum monitor gain.
-        if (current.Percent != _lastAudio.Percent && current.Percent != 100) Queue(current.Percent);
-        else if (current.Percent == 100 && _lastAudio.Percent != 100 &&
-                 current.Revision != _lastAudio.Revision) Queue(100);
+        // Native keys, sliders, and application endpoint writes are absolute requests.
+        if (current.Percent != _lastAudio.Percent) Queue(current.Percent);
         _lastAudio = current;
+    }
+
+    private void MatchWindowsToConfirmed()
+    {
+        if (_lastAudio.Percent == _confirmed.Percent) return;
+        // Mirror hardware-button changes and confirmed quantization without
+        // overwriting a newer slider, mute, or route change or echoing our own set.
+        if (audio.TrySetPercent(_confirmed.Percent, _lastAudio))
+            _lastAudio = _lastAudio with { Percent = _confirmed.Percent };
+        Observe(audio.Capture());
+        if (_lastAudio.Percent != _confirmed.Percent && !IsPending) Queue(_lastAudio.Percent);
     }
 
     private void Queue(int desired)
