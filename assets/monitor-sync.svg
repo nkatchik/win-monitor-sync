@@ -1,19 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#FFFFFF" role="img" aria-labelledby="title description">
   <title id="title">Monitor Sync</title>
-  <desc id="description">Three concentric sound waves and a sun share a centre across a diagonal split, in white on a solid blue rounded square.</desc>
+  <desc id="description">Two short, outward sound waves face away from a sun across a diagonal split, in white on a charcoal rounded square.</desc>
   <defs>
-    <clipPath id="sound-half">
-      <path d="M0 1.25 22.75 24H0Z" />
-    </clipPath>
     <clipPath id="sun-half">
       <path d="M1.25 0H24V22.75Z" />
     </clipPath>
   </defs>
-  <rect id="background" width="24" height="24" rx="5" fill="#0078D4" />
-  <g clip-path="url(#sound-half)" stroke="currentColor" stroke-width="1.8">
-    <circle cx="12" cy="12" r="4.5" />
-    <circle cx="12" cy="12" r="7" />
-    <circle cx="12" cy="12" r="9.5" />
+  <rect id="background" width="24" height="24" rx="5" fill="#4A4F54" />
+  <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M12 16.5A4.5 4.5 0 0 1 7.5 12" />
+    <path d="M12 20.5A8.5 8.5 0 0 1 3.5 12" />
   </g>
   <g clip-path="url(#sun-half)" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <circle cx="12" cy="12" r="4.5" />

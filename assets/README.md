@@ -14,8 +14,9 @@ without adding fringes around the rounded background.
 
 Both icons contain images at 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixels,
 with transparency outside the rounded square. The executable and tray use
-`monitor-sync.ico`: a white sun and three sound waves on a solid blue background.
-The first wave shares the sun's centre, radius and stroke thickness.
+`monitor-sync.ico`: a white sun and two short sound arcs on a solid charcoal
+background. The arcs open toward the shared centre and radiate toward the lower
+left. The first wave shares the sun's centre, radius and stroke thickness.
 
 `monitor-sync-tray.ico` is a black-background, white-glyph coverage map used only
 in high contrast. The tray maps it to the system window background and text
