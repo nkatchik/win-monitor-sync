@@ -10,6 +10,7 @@ public partial class App : System.Windows.Application
 {
     private Mutex? _instance;
     private Forms.NotifyIcon? _tray;
+    private TrayIcon? _trayIcon;
     private TrayFlyout? _flyout;
     private SyncController? _controller;
     private DdcClient? _ddc;
@@ -80,9 +81,11 @@ public partial class App : System.Windows.Application
         _flyout.ExitItem.Click += async (_, _) => await ExitAsync();
         _tray = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
-            Text = "Monitor Sync", Visible = true
+            Text = "Monitor Sync"
         };
+        _trayIcon = new TrayIcon(_tray);
+        _trayIcon.Refresh();
+        _tray.Visible = true;
         _tray.MouseUp += (_, args) =>
         {
             if (_exiting || args.Button is not (Forms.MouseButtons.Left or Forms.MouseButtons.Right)) return;
@@ -91,6 +94,7 @@ public partial class App : System.Windows.Application
         };
         SystemEvents.DisplaySettingsChanged += DisplayChanged;
         SystemEvents.PowerModeChanged += PowerChanged;
+        SystemEvents.UserPreferenceChanged += PreferenceChanged;
         _brightnessActive = ReadActive(() => SettingsStore.BrightnessActive);
         _volumeActive = ReadActive(() => SettingsStore.VolumeActive);
         _updatingPreferences = true;
@@ -213,10 +217,20 @@ public partial class App : System.Windows.Application
     private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(() =>
     {
         if (_exiting) return;
+        RefreshTrayIcon();
         _brightnessMediaKeys?.Reset();
         _brightness?.Invalidate();
         _controller?.TopologyChanged();
     });
+    private void PreferenceChanged(object sender, UserPreferenceChangedEventArgs e) => Dispatcher.InvokeAsync(RefreshTrayIcon);
+
+    private void RefreshTrayIcon()
+    {
+        if (_exiting) return;
+        try { _trayIcon?.Refresh(); }
+        catch (Exception error) { SettingsStore.Log(error.ToString()); }
+    }
+
     private void PowerChanged(object sender, PowerModeChangedEventArgs e)
     {
         if (e.Mode is PowerModes.Suspend or PowerModes.Resume)
@@ -224,6 +238,7 @@ public partial class App : System.Windows.Application
             {
                 _suspended = e.Mode == PowerModes.Suspend;
                 if (_exiting) return;
+                if (!_suspended) RefreshTrayIcon();
                 _brightnessMediaKeys?.SetSuspended(_suspended);
                 _brightness?.SetSuspended(_suspended);
                 _controller?.SetSuspended(_suspended);
@@ -245,6 +260,7 @@ public partial class App : System.Windows.Application
     {
         SystemEvents.DisplaySettingsChanged -= DisplayChanged;
         SystemEvents.PowerModeChanged -= PowerChanged;
+        SystemEvents.UserPreferenceChanged -= PreferenceChanged;
         _flyout?.Dispose();
         _brightnessMediaKeys?.Dispose();
         _brightnessHotkeys?.Dispose();
@@ -252,6 +268,7 @@ public partial class App : System.Windows.Application
         _controller?.Dispose();
         _ddc?.Dispose();
         _tray?.Dispose();
+        _trayIcon?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);
     }
