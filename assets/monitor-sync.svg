@@ -2,14 +2,12 @@
   <title id="title">Monitor Sync</title>
   <desc id="description">A speaker and sun share a diagonally split symbol: speaker below left, sun above right.</desc>
   <defs>
-    <clipPath id="speaker-half">
-      <path d="M0 1.25 22.75 24H0Z" />
-    </clipPath>
     <clipPath id="sun-half">
       <path d="M1.25 0H24V22.75Z" />
     </clipPath>
   </defs>
-  <path clip-path="url(#speaker-half)" fill="currentColor" d="M3.5 9.5H7.5L14 4.5V20.5L7.5 15.5H3.5Z" />
+  <path fill="currentColor" d="M2.75 14H5.5L9.75 11V21.5L5.5 18.5H2.75Z" />
+  <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 13.5A3.5 3.5 0 0 1 12 19" />
   <g clip-path="url(#sun-half)" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <circle cx="12" cy="12" r="4.5" />
     <path d="M12 2.75V5M17 7 18.6 5.4M19 12H21.25" />
