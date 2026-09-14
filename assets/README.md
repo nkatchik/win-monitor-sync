@@ -11,6 +11,9 @@ files directly and do not require the generator.
 Each size is rendered at eight times its resolution, then reduced by averaging
 premultiplied colour and alpha coverage. This smooths curves and diagonal edges
 without adding fringes around the rounded background.
+The background uses gradual corner curves and a half-unit inset in the 24-unit
+viewBox, leaving room to antialias the perimeter instead of clipping it at the
+image boundary.
 
 Both icons contain images at 16, 20, 24, 32, 40, 48, 64, 96, 128 and 256 pixels,
 with transparency outside the rounded square. The executable and tray use
