@@ -7,7 +7,7 @@ using System.Xml.Linq;
 
 internal static class Program
 {
-    // This small renderer supports the monochrome paths, circles, clipping and
+    // This small renderer supports the paths, circles, rounded rectangles, clipping and
     // rotations used by our source SVG. Icon generation is an offline Windows step.
     [STAThread]
     private static void Main(string[] args)
@@ -17,15 +17,16 @@ internal static class Program
         var source = XDocument.Load(Path.Combine(directory, "monitor-sync.svg")).Root!;
         if (source.Attribute("viewBox")?.Value != "0 0 24 24")
             throw new NotSupportedException("Expected the icon's 24 by 24 viewBox.");
-        WriteIcon(source, Path.Combine(directory, "monitor-sync-tray.ico"), Colors.Black);
-        // A neutral application icon stays visible on both light and dark Explorer backgrounds.
-        WriteIcon(source, Path.Combine(directory, "monitor-sync.ico"), Color.FromRgb(115, 115, 115));
+        var ink = (Color)ColorConverter.ConvertFromString(source.Attribute("color")?.Value ?? "black");
+        WriteIcon(source, Path.Combine(directory, "monitor-sync.ico"), ink);
+        // Black background / white glyph coverage lets the tray use any high-contrast palette.
+        WriteIcon(source, Path.Combine(directory, "monitor-sync-tray.ico"), Colors.White, Brushes.Black);
     }
 
-    private static void WriteIcon(XElement source, string path, Color ink)
+    private static void WriteIcon(XElement source, string path, Color ink, Brush? background = null)
     {
         int[] sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256];
-        var frames = sizes.Select(size => Render(source, size, ink)).ToArray();
+        var frames = sizes.Select(size => Render(source, size, ink, background)).ToArray();
         using var file = File.Create(path);
         using var writer = new BinaryWriter(file);
         writer.Write((ushort)0);
@@ -48,13 +49,13 @@ internal static class Program
         Console.WriteLine(path);
     }
 
-    private static byte[] Render(XElement source, int size, Color ink)
+    private static byte[] Render(XElement source, int size, Color ink, Brush? background)
     {
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
             dc.PushTransform(new ScaleTransform(size / 24.0, size / 24.0));
-            Draw(dc, source, source, new SolidColorBrush(ink));
+            Draw(dc, source, source, new SolidColorBrush(ink), background);
             dc.Pop();
         }
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
@@ -66,7 +67,7 @@ internal static class Program
         return stream.ToArray();
     }
 
-    private static void Draw(DrawingContext dc, XElement element, XElement root, Brush ink)
+    private static void Draw(DrawingContext dc, XElement element, XElement root, Brush ink, Brush? background)
     {
         var name = element.Name.LocalName;
         if (name is "defs" or "title" or "desc") return;
@@ -95,12 +96,15 @@ internal static class Program
         {
             "path" => Geometry.Parse(element.Attribute("d")!.Value),
             "circle" => new EllipseGeometry(new Point(Number(element, "cx"), Number(element, "cy")), Number(element, "r"), Number(element, "r")),
+            "rect" => new RectangleGeometry(new Rect(Number(element, "x", 0), Number(element, "y", 0), Number(element, "width"), Number(element, "height")),
+                Number(element, "rx", 0), Number(element, "ry", Number(element, "rx", 0))),
             "svg" or "g" => null,
             _ => throw new NotSupportedException($"Unsupported SVG element: {name}")
         };
         if (geometry is not null)
         {
-            var fill = Paint(element, "fill", "black", ink);
+            var fill = element.Attribute("id")?.Value == "background" && background is not null
+                ? background : Paint(element, "fill", "black", ink);
             Pen? pen = null;
             if (Paint(element, "stroke", "none", ink) is { } stroke)
             {
@@ -114,7 +118,7 @@ internal static class Program
             }
             dc.DrawGeometry(fill, pen, geometry);
         }
-        else foreach (var child in element.Elements()) Draw(dc, child, root, ink);
+        else foreach (var child in element.Elements()) Draw(dc, child, root, ink, background);
         if (clipping is not null) dc.Pop();
         if (transform is not null) dc.Pop();
     }
@@ -123,12 +127,14 @@ internal static class Program
         Inherit(element, name, fallback) switch
         {
             "none" => null,
-            "currentColor" or "black" => ink,
-            var value => throw new NotSupportedException($"Unsupported SVG paint: {value}")
+            "currentColor" => ink,
+            var value => new SolidColorBrush((Color)ColorConverter.ConvertFromString(value))
         };
 
     private static string Inherit(XElement element, string name, string fallback) => element.AncestorsAndSelf()
         .Select(e => e.Attribute(name)?.Value).FirstOrDefault(v => v is not null) ?? fallback;
 
-    private static double Number(XElement element, string name) => double.Parse(element.Attribute(name)!.Value, CultureInfo.InvariantCulture);
+    private static double Number(XElement element, string name, double? fallback = null) => element.Attribute(name) is { } attribute
+        ? double.Parse(attribute.Value, CultureInfo.InvariantCulture)
+        : fallback ?? throw new InvalidDataException($"Missing SVG attribute: {name}");
 }

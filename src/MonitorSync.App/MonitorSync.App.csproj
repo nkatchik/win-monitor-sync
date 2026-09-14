@@ -16,7 +16,8 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../assets/monitor-sync-tray.ico" LogicalName="MonitorSync.Tray.ico" />
+    <EmbeddedResource Include="../../assets/monitor-sync.ico" LogicalName="MonitorSync.Icon.ico" />
+    <EmbeddedResource Include="../../assets/monitor-sync-tray.ico" LogicalName="MonitorSync.Contrast.ico" />
     <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../licenses/*" Link="licenses/%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

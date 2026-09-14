@@ -1,19 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#FFFFFF" role="img" aria-labelledby="title description">
   <title id="title">Monitor Sync</title>
-  <desc id="description">A speaker with a sound wave, rotated 45 degrees clockwise, aligns with a sun across a diagonal split.</desc>
+  <desc id="description">Three concentric sound waves and a sun share a centre across a diagonal split, in white on a solid blue rounded square.</desc>
   <defs>
-    <clipPath id="speaker-half">
+    <clipPath id="sound-half">
       <path d="M0 1.25 22.75 24H0Z" />
     </clipPath>
     <clipPath id="sun-half">
       <path d="M1.25 0H24V22.75Z" />
     </clipPath>
   </defs>
-  <g clip-path="url(#speaker-half)">
-    <g transform="rotate(45 12 12)">
-      <path fill="currentColor" d="M6.75 9H10.75L17.25 4V20L10.75 15H6.75Z" />
-      <path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M19.5 7A6 6 0 0 1 19.5 17" />
-    </g>
+  <rect id="background" width="24" height="24" rx="5" fill="#0078D4" />
+  <g clip-path="url(#sound-half)" stroke="currentColor" stroke-width="1.8">
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="7" />
+    <circle cx="12" cy="12" r="9.5" />
   </g>
   <g clip-path="url(#sun-half)" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <circle cx="12" cy="12" r="4.5" />
