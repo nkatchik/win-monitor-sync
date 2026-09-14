@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#FFFFFF" role="img" aria-labelledby="title description">
   <title id="title">Monitor Sync</title>
-  <desc id="description">A monitor with a horizontal adjustment slider inside, in white on a medium slate-grey square with softly flowing corners.</desc>
-  <path id="background" fill="#77899A" d="M8 .5H16
+  <desc id="description">A monitor with a horizontal adjustment slider inside, in white on a blue square with softly flowing corners.</desc>
+  <path id="background" fill="#426E9B" d="M8 .5H16
     C20 .5 21 .5 22.25 1.75C23.5 3 23.5 4 23.5 8V16
     C23.5 20 23.5 21 22.25 22.25C21 23.5 20 23.5 16 23.5H8
     C4 23.5 3 23.5 1.75 22.25C.5 21 .5 20 .5 16V8
