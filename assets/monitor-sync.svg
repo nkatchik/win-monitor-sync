@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#FFFFFF" role="img" aria-labelledby="title description">
   <title id="title">Monitor Sync</title>
-  <desc id="description">Two short, outward sound waves face away from a sun across a diagonal split, in white on a charcoal rounded square.</desc>
+  <desc id="description">Two short, outward sound waves face away from a sun across a diagonal split, in white on a medium slate-grey rounded square.</desc>
   <defs>
     <clipPath id="sun-half">
       <path d="M1.25 0H24V22.75Z" />
     </clipPath>
   </defs>
-  <rect id="background" width="24" height="24" rx="5" fill="#4A4F54" />
+  <rect id="background" width="24" height="24" rx="5" fill="#77899A" />
   <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
     <path d="M12 16.5A4.5 4.5 0 0 1 7.5 12" />
     <path d="M12 20.5A8.5 8.5 0 0 1 3.5 12" />
