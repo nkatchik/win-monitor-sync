@@ -144,12 +144,12 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Audio output on display A, cursor on display B | Volume sync controls only A; cursor position does not redirect audio |
 | Selected audio monitor unavailable while another supports DDC | Neither that other monitor nor the Windows endpoint is changed by sync |
 | Worker/app termination | No audio interruption or forced volume reset; helper exits with its owner |
-| Brightness indicator | Resembles Windows in light/dark/high-contrast modes, remains readable at each DPI, takes no focus, and dismisses automatically |
-| High DPI, keyboard, screen reader | Sliders, Active, Start with Windows, and Exit are usable; disabled states are exposed; brightness announcements are usable |
+| Brightness feedback | Keyboard and slider input create no app overlay; existing Windows/OEM UI remains unaffected; the tray shows confirmed hardware brightness after adjustment |
+| High DPI, keyboard, screen reader | Sliders, Active, Start with Windows, and Exit are usable; disabled states and brightness values are accessible |
 
 A successful DDC write reply is not sufficient: check the monitor's displayed value and audible/visible behavior. Measure the useful quiet-to-loud range before deciding whether a different mapping is needed. Exclusive-mode playback can have a different gain response from shared-mode playback.
 
-Brightness now bypasses the native Windows slider by design. It uses DDC directly and provides its own temporary indicator.
+Brightness bypasses the native Windows slider by design. It uses DDC directly and creates no app overlay. Native Windows/OEM brightness UI operates independently of DDC readback.
 
 On multiple displays, verify that brightness targets only the screen under the cursor, even when audio plays through another monitor. Moving the cursor alone must not change brightness. An unsupported or ambiguous cursor target must produce no writes to any screen. Crossing to another screen or changing display topology during a pending adjustment must discard stale commands and readback. These remain hardware acceptance requirements; the corresponding engine guards are covered by deterministic tests.
 
@@ -180,6 +180,12 @@ On multiple displays, verify that brightness targets only the screen under the c
 - Live Dell checks started at Windows 100%, monitor 2%, brightness 100%, unmuted. Startup aligned Windows to 2%; the tray immediately set Windows to 1% and real DDC readback confirmed monitor 1%. A native endpoint request then reached monitor 2% while Windows remained 2%, with the tray menu staying open through its adjustment. The selected audio route changed during the subsequent direct-monitor/polling check, and the worker rejected further volume writes, including cleanup aimed at the old output. A separate cleanup verified the known Dell was still at the test-written 1% and restored its captured 2% through the generic monitor API, preserving the newly selected Steam Streaming Microphone output at 50%, unmuted. No output switch or Windows restoration was forced. Live monitor-button-to-Windows polling remains to be repeated; deterministic coverage passed.
 - Published binaries matched the built app, core, Windows adapter, and real DDC worker. Restarted the app with both controls enabled and the original startup entry intact. The selected output was not a monitor, so monitor volume sync remained idle; brightness remained 100%.
 - The broader per-item desktop harness checked defaults/migration and slider activation, but focus/menu dismissal prevented completing its full navigation/failure sequence in this session. The preceding independent-activation results remain historical validation. Traces are in ignored `artifacts/debug/matched-*`.
+
+### Brightness overlay removal, 14 September 2026
+
+- Removed the brightness overlay's XAML, window class, and controller presentation state. Media keys, fallback shortcuts, DDC timing/confirmation, and tray feedback retain their existing behavior. The user observed a Windows brightness indicator even with the app stopped; the app now creates no second indicator.
+- Debug solution build passed with zero warnings/errors; **77/77 deterministic tests passed**. An isolated check of the built and published assemblies confirmed that both the brightness overlay type and its compiled XAML resource are absent, while the tray menu resource remains present. This check created no app instance and issued no hardware calls.
+- Published managed binaries matched the build. Launched the updated tray app with its current saved preferences preserved: brightness off, volume on, startup off. Physical brightness-key operation was not retested in this revision.
 
 ## Windows installer and distribution
 

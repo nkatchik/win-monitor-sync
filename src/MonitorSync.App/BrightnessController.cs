@@ -11,7 +11,6 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     private Session? _session;
     private Task _pump = Task.CompletedTask;
     private Task _refreshTask = Task.CompletedTask;
-    private BrightnessFlyout? _flyout;
     private (CursorDisplay Target, int Percent)? _reading;
     private long _revision;
     private bool _suspended, _disposed;
@@ -58,7 +57,7 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     public bool SetPercent(int percent)
     {
         if (Percent is null || _reading is not { } reading) return false;
-        Queue(reading.Target, engine => engine.SetPercent(percent), showFlyout: false);
+        Queue(reading.Target, engine => engine.SetPercent(percent));
         return true;
     }
 
@@ -67,10 +66,10 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
         if (_disposed || _suspended) return;
         var target = CursorDisplay.Capture();
         if (target is null) { Invalidate(); return; }
-        Queue(target, engine => engine.Step(delta), showFlyout: true);
+        Queue(target, engine => engine.Step(delta));
     }
 
-    private void Queue(CursorDisplay target, Action<BrightnessAdjuster> input, bool showFlyout)
+    private void Queue(CursorDisplay target, Action<BrightnessAdjuster> input)
     {
         _revision++;
         if (_session is not { } session || session.Target.Handle != target.Handle || session.Target.Id != target.Id)
@@ -80,15 +79,7 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
             session.Engine = new BrightnessAdjuster(new CursorBrightness(client, target.Id),
                 () => ReferenceEquals(_session, session) && target.IsCurrent(), () => _clock.ElapsedMilliseconds);
         }
-        session.ShowFlyout = showFlyout;
         input(session.Engine!);
-        if (showFlyout)
-        {
-            _flyout ??= new BrightnessFlyout();
-            if (session.Engine!.HasReading) _flyout.ShowLevel(target, session.Engine.Percent, session.Engine.IsPending);
-            else _flyout.ShowMessage(target, "Brightness");
-        }
-        else _flyout?.HideImmediately();
         Changed?.Invoke(this, EventArgs.Empty);
         if (_pump.IsCompleted) _pump = PumpAsync(_lifetime.Token);
     }
@@ -102,25 +93,22 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
                 var engine = session.Engine!;
                 await engine.StartAsync(token);
                 Publish(session);
-                var shown = (engine.Percent, engine.IsPending);
+                var published = (engine.Percent, engine.IsPending);
                 while (engine.IsPending)
                 {
                     await engine.TickAsync(token);
                     var current = (engine.Percent, engine.IsPending);
-                    if (current != shown) { Publish(session); shown = current; }
+                    if (current != published) { Publish(session); published = current; }
                     if (engine.IsPending) await Task.Delay(20, token);
                 }
             }
-            catch (MonitorTargetChangedException) { _flyout?.HideImmediately(); }
+            catch (MonitorTargetChangedException) { }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception error)
             {
                 SettingsStore.Log(error.ToString());
                 if (ReferenceEquals(_session, session))
-                {
                     _reading = null;
-                    if (session.ShowFlyout) _flyout?.ShowMessage(session.Target, "Brightness unavailable");
-                }
             }
             finally
             {
@@ -138,7 +126,6 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     {
         if (!ReferenceEquals(_session, session) || !session.Target.IsCurrent()) return;
         _reading = (session.Target, session.Engine!.Percent);
-        if (session.ShowFlyout) _flyout?.ShowLevel(session.Target, session.Engine.Percent, session.Engine.IsPending);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -147,7 +134,6 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
         _session = null;
         _reading = null;
         _revision++;
-        _flyout?.HideImmediately();
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -168,7 +154,6 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
         _disposed = true;
         _lifetime.Cancel();
         _session = null;
-        _flyout?.Close();
         _lifetime.Dispose();
     }
 
@@ -176,7 +161,6 @@ public sealed class BrightnessController(DdcClient client) : IDisposable
     {
         public CursorDisplay Target { get; } = target;
         public BrightnessAdjuster? Engine;
-        public bool ShowFlyout;
     }
 
     private sealed class CursorBrightness(DdcClient ddc, string id) : IMonitorVolume

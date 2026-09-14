@@ -1,6 +1,6 @@
 # Monitor Sync
 
-A Windows 11 tray app that controls monitor speaker volume and brightness through DDC/CI, with a Windows-style brightness indicator. Volume follows the selected audio output; brightness follows the mouse cursor. There is no custom driver, audio routing, or administrator service.
+A Windows 11 tray app that controls monitor speaker volume and brightness through DDC/CI. Volume follows the selected audio output; brightness follows the mouse cursor. There is no custom driver, audio routing, or administrator service.
 
 The first target is the Dell S2725QS over HDMI, followed by DisplayPort. HDMI checks confirmed direct monitor volume control. DDC remains intermittent on this setup; bounded read recovery and automatic reconnection handle failures. Physical keyboard acceptance and DisplayPort testing remain incomplete. See [validation results](docs/TESTING.md).
 
@@ -16,8 +16,8 @@ The first target is the Dell S2725QS over HDMI, followed by DisplayPort. HDMI ch
 - Volume and mute keys retain normal Windows behavior. Sync preserves endpoint mute and individual application volumes. Monitor hardware mute is not synchronized.
 - The app runs entirely in the notification area. **Brightness**, **Volume**, and **Start with Windows** are on by default and remembered independently. Unchecking a control cancels its pending work and stops its monitoring while the other control keeps running; brightness also releases its keyboard inputs. Unchecking both stops polling and the DDC worker. Current hardware and Windows levels are left in place; re-enabling starts from fresh readings. The previous global Active preference supplies the initial choice for each control when upgrading.
 - Keyboard **brightness keys (usually marked with sun icons)** adjust brightness by 5% on the screen under the mouse cursor, independently of the audio output. Hold a key to keep adjusting. **Ctrl+Alt+Page Up / Page Down** remains available as a fallback; the tray slider works without special keys.
-- Keyboard brightness changes show a temporary indicator at the bottom centre of that screen. It follows the Windows light/dark theme and fades without taking focus. Tray slider adjustments use the menu itself for feedback, without an extra overlay.
-- There is no settings window or pairing step. Brightness bypasses the native Windows slider; the indicator is provided by this app.
+- Brightness keys and tray adjustments create no app overlay. Windows or keyboard software may still show its own indicator; the tray shows the monitor's confirmed brightness after adjustment.
+- There is no settings window or pairing step. Brightness uses DDC directly; the native Windows brightness UI is not synchronized with the monitor.
 
 If the cursor's screen cannot be identified unambiguously or controlled through DDC/CI, brightness changes nothing. It never falls back to another screen. Moving the cursor alone does not change brightness; crossing screens discards pending work for the old target. Each new key burst starts with a fresh hardware reading, including changes made using the monitor's own buttons.
 
