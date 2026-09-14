@@ -1,22 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#FFFFFF" role="img" aria-labelledby="title description">
   <title id="title">Monitor Sync</title>
-  <desc id="description">Two short, outward sound waves face away from a sun across a diagonal split, in white on a medium slate-grey square with softly flowing corners.</desc>
-  <defs>
-    <clipPath id="sun-half">
-      <path d="M1.25 0H24V22.75Z" />
-    </clipPath>
-  </defs>
+  <desc id="description">A monitor with a horizontal adjustment slider inside, in white on a medium slate-grey square with softly flowing corners.</desc>
   <path id="background" fill="#77899A" d="M8 .5H16
     C20 .5 21 .5 22.25 1.75C23.5 3 23.5 4 23.5 8V16
     C23.5 20 23.5 21 22.25 22.25C21 23.5 20 23.5 16 23.5H8
     C4 23.5 3 23.5 1.75 22.25C.5 21 .5 20 .5 16V8
     C.5 4 .5 3 1.75 1.75C3 .5 4 .5 8 .5Z" />
-  <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-    <path d="M12 16.5A4.5 4.5 0 0 1 7.5 12" />
-    <path d="M12 20.5A8.5 8.5 0 0 1 3.5 12" />
+  <g stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="5" width="16" height="11" rx="1.5" />
+    <path d="M12 16V19M8.5 19H15.5" />
+    <path d="M7 10.5H17" stroke-width="1.4" />
   </g>
-  <g clip-path="url(#sun-half)" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-    <circle cx="12" cy="12" r="4.5" />
-    <path d="M12 2.75V5M17 7 18.6 5.4M19 12H21.25" />
-  </g>
+  <circle cx="13.5" cy="10.5" r="1.6" fill="currentColor" />
 </svg>
