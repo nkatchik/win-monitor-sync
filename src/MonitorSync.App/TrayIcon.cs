@@ -15,8 +15,13 @@ internal sealed class TrayIcon(Forms.NotifyIcon tray) : IDisposable
     public void Refresh()
     {
         var taskbar = FindWindow("Shell_TrayWnd", null);
-        var dpi = taskbar == IntPtr.Zero ? 96u : GetDpiForWindow(taskbar);
-        var size = Math.Clamp(GetSystemMetricsForDpi(49 /* SM_CXSMICON */, dpi == 0 ? 96u : dpi), 16, 256);
+        var dpi = taskbar == IntPtr.Zero ? 0u : GetDpiForWindow(taskbar);
+        // Explorer can briefly disappear while restarting or changing its theme.
+        // Keep the last sharp size instead of replacing it with a 96-DPI image.
+        var size = dpi == 0 && _appearance is { } previous
+            ? previous.Size
+            : GetSystemMetricsForDpi(49 /* SM_CXSMICON */, dpi == 0 ? GetDpiForSystem() : dpi);
+        size = Math.Clamp(size, 16, 256);
         var contrast = Forms.SystemInformation.HighContrast;
         var foreground = contrast ? SystemColors.WindowText : Color.Empty;
         var background = contrast ? SystemColors.Window : Color.Empty;
@@ -24,6 +29,7 @@ internal sealed class TrayIcon(Forms.NotifyIcon tray) : IDisposable
         if (_appearance == appearance) return;
 
         var next = CreateIcon(size, foreground, background);
+        SettingsStore.Log($"Tray icon: taskbar DPI {dpi}, requested {size}px, image {next.Width}x{next.Height}.");
         try { tray.Icon = next; }
         catch { next.Dispose(); throw; }
         _icon?.Dispose();
@@ -79,6 +85,9 @@ internal sealed class TrayIcon(Forms.NotifyIcon tray) : IDisposable
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForSystem();
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetricsForDpi(int index, uint dpi);

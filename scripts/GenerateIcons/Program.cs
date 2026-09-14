@@ -51,17 +51,34 @@ internal static class Program
 
     private static byte[] Render(XElement source, int size, Color ink, Brush? background)
     {
+        const int samples = 8;
+        var renderSize = size * samples;
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
-            dc.PushTransform(new ScaleTransform(size / 24.0, size / 24.0));
+            dc.PushTransform(new ScaleTransform(renderSize / 24.0, renderSize / 24.0));
             Draw(dc, source, source, new SolidColorBrush(ink), background);
             dc.Pop();
         }
-        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        var bitmap = new RenderTargetBitmap(renderSize, renderSize, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
+        // Average coverage at the final pixel size. Working in premultiplied alpha
+        // keeps rounded corners clean instead of adding a dark or light fringe.
+        var rendered = new byte[renderSize * renderSize * 4];
+        bitmap.CopyPixels(rendered, renderSize * 4, 0);
+        var pixels = new byte[size * size * 4];
+        for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+                for (var channel = 0; channel < 4; channel++)
+                {
+                    var sum = 0;
+                    for (var sy = 0; sy < samples; sy++)
+                        for (var sx = 0; sx < samples; sx++)
+                            sum += rendered[((y * samples + sy) * renderSize + x * samples + sx) * 4 + channel];
+                    pixels[(y * size + x) * 4 + channel] = (byte)((sum + samples * samples / 2) / (samples * samples));
+                }
         var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(size, size, 96, 96, PixelFormats.Pbgra32, null, pixels, size * 4)));
         using var stream = new MemoryStream();
         encoder.Save(stream);
         return stream.ToArray();
