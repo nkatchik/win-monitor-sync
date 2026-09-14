@@ -81,7 +81,7 @@ public partial class App : System.Windows.Application
         _flyout.ExitItem.Click += async (_, _) => await ExitAsync();
         _tray = new Forms.NotifyIcon
         {
-            Text = "Monitor Sync"
+            Text = "MonitorSync"
         };
         _trayIcon = new TrayIcon(_tray);
         _trayIcon.Refresh();

@@ -84,7 +84,7 @@ jobs:
           NOTES
           tag="v${RELEASE_VERSION}"
           gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" \
-            --title "Monitor Sync $RELEASE_VERSION" --notes-file release-notes.md --generate-notes --draft
+            --title "MonitorSync $RELEASE_VERSION" --notes-file release-notes.md --generate-notes --draft
           gh release edit "$tag" --draft=false
-          printf 'Published [Monitor Sync %s](https://github.com/%s/releases/tag/%s)\n' \
+          printf 'Published [MonitorSync %s](https://github.com/%s/releases/tag/%s)\n' \
             "$RELEASE_VERSION" "$GITHUB_REPOSITORY" "$tag" >> "$GITHUB_STEP_SUMMARY"

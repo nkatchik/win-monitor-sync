@@ -11,7 +11,7 @@ public sealed class BrightnessHotkeys : IDisposable
 
     public BrightnessHotkeys()
     {
-        _source = new HwndSource(new HwndSourceParameters("Monitor Sync brightness shortcuts")
+        _source = new HwndSource(new HwndSourceParameters("MonitorSync brightness shortcuts")
         { ParentWindow = new IntPtr(-3), WindowStyle = 0, Width = 0, Height = 0 });
         _source.AddHook(HandleMessage);
         // Ctrl+Alt+Page Up / Page Down. Allow keyboard repeat; the engine coalesces it.

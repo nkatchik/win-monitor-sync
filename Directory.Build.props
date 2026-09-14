@@ -6,6 +6,6 @@
     <Deterministic>true</Deterministic>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Version>0.1.0</Version>
-    <Authors>Monitor Sync contributors</Authors>
+    <Authors>MonitorSync contributors</Authors>
   </PropertyGroup>
 </Project>

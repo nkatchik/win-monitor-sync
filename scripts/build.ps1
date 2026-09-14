@@ -2,7 +2,7 @@
 param(
     [ValidateSet('win-x64', 'win-arm64')][string]$Runtime = 'win-x64',
     [string]$Version = '0.1.0',
-    [string]$Publisher = 'Monitor Sync contributors',
+    [string]$Publisher = 'MonitorSync contributors',
     [string]$CertificateThumbprint = '',
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [switch]$RequireSigned

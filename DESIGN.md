@@ -1,4 +1,4 @@
-# Monitor Sync for Windows 11
+# MonitorSync for Windows 11
 
 Design and implementation status, 14 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. **Brightness**, **Volume**, and **Start with Windows** default to on and are remembered independently. The app has no brightness or volume overlay. MSI installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 

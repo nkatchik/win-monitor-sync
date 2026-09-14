@@ -1,4 +1,4 @@
-# Monitor Sync
+# MonitorSync
 
 A Windows 11 tray app that controls monitor speaker volume and brightness through DDC/CI. Volume follows the selected audio output; brightness follows the mouse cursor. There is no custom driver, audio routing, or administrator service.
 

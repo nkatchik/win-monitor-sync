@@ -132,7 +132,7 @@ Record the Windows build, GPU model/driver, connector/cable, active monitor inpu
 | Dell volume buttons | Windows and tray monitor levels follow within approximately five seconds without an echo write |
 | Windows mute | Sync preserves mute through monitor-volume updates; native volume and mute keys retain normal Windows behavior |
 | Per-app volume | Individual app settings remain unchanged |
-| Switch to headphones | Monitor sync suspends; headphone level is not copied from the Dell |
+| Switch to headphones | MonitorSync suspends monitor control; headphone level is not copied from the Dell |
 | Switch back | Monitor is rediscovered automatically; live percentages align to the lower value without restoring stale settings |
 | Exit | No further sync writes; normal Windows playback continues |
 | Sleep / wake / cable reconnect | Pending operations are canceled; live handles are recreated; stale requests do not alter a new output |

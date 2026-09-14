@@ -23,7 +23,7 @@ public sealed class BrightnessMediaKeys : IDisposable
     {
         var clock = Stopwatch.StartNew();
         _keys = new(() => clock.ElapsedMilliseconds);
-        _source = new HwndSource(new HwndSourceParameters("Monitor Sync brightness media keys")
+        _source = new HwndSource(new HwndSourceParameters("MonitorSync brightness media keys")
         { ParentWindow = new IntPtr(-3), WindowStyle = 0, Width = 0, Height = 0 });
         _source.AddHook(HandleMessage);
         try

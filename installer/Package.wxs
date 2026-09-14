@@ -1,15 +1,15 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Monitor Sync" Manufacturer="$(var.Publisher)" Version="$(var.Version)"
+  <Package Name="MonitorSync" Manufacturer="$(var.Publisher)" Version="$(var.Version)"
            UpgradeCode="216F0043-C413-4C61-A5C7-153FFCE3EBD3" Scope="perUser" Compressed="yes">
     <MajorUpgrade Schedule="afterInstallExecute"
-                  DowngradeErrorMessage="A newer version of Monitor Sync is already installed." />
+                  DowngradeErrorMessage="A newer version of MonitorSync is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
     <Property Id="WINDOWSBUILDNUMBER" Secure="yes">
       <RegistrySearch Id="BuildNumberSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
                       Name="CurrentBuildNumber" Type="raw" Bitness="always64" />
     </Property>
     <Launch Condition="Installed OR (VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 22000 AND MsiNTProductType = 1)"
-            Message="Monitor Sync requires Windows 11 on a 64-bit PC." />
+            Message="MonitorSync requires Windows 11 on a 64-bit PC." />
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="UserProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="MonitorSync">
@@ -24,13 +24,13 @@
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="EC2908B1-DB76-4CF4-8DF6-81298B867B34">
-        <Shortcut Id="StartMenu" Name="Monitor Sync" Target="[INSTALLFOLDER]MonitorSync.exe"
+        <Shortcut Id="StartMenu" Name="MonitorSync" Target="[INSTALLFOLDER]MonitorSync.exe"
                   WorkingDirectory="INSTALLFOLDER" Description="Synchronize Windows and monitor volume" />
         <RegistryValue Root="HKCU" Key="Software\MonitorSync" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
         <RemoveFolder Id="RemoveEmptyUserPrograms" Directory="UserProgramsFolder" On="uninstall" />
       </Component>
     </StandardDirectory>
-    <Feature Id="Main" Title="Monitor Sync" Level="1">
+    <Feature Id="Main" Title="MonitorSync" Level="1">
       <ComponentGroupRef Id="Payload" />
       <ComponentRef Id="StartMenuShortcut" />
       <ComponentRef Id="StartupPreference" />

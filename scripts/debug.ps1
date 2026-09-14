@@ -73,7 +73,7 @@ try {
     }
     else {
         Start-Process -FilePath $app -WindowStyle Hidden
-        Write-Output 'Monitor Sync is running in the tray. Use its Exit menu item to stop it.'
+        Write-Output 'MonitorSync is running in the tray. Use its Exit menu item to stop it.'
     }
 }
 finally {
