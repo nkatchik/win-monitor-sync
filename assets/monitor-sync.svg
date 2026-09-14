@@ -9,7 +9,7 @@
   <g stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="5" width="16" height="11" rx="1.5" />
     <path d="M12 16V19M8.5 19H15.5" />
-    <path d="M7 10.5H17" stroke-width="1.4" />
+    <path d="M7 10.5H10.5M15.5 10.5H17" stroke-width="1.4" />
   </g>
-  <circle cx="13.5" cy="10.5" r="1.6" fill="currentColor" />
+  <rect x="12" y="8" width="2" height="5" rx=".6" fill="currentColor" />
 </svg>
