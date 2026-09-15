@@ -10,6 +10,14 @@
     </Property>
     <Launch Condition="Installed OR (VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 22000 AND MsiNTProductType = 1)"
             Message="MonitorSync requires Windows 11 on a 64-bit PC." />
+    <!-- Launch asynchronously after a successful install/upgrade, once the payload is committed.
+         MSI must not wait for the tray app to exit; repair/uninstall do not launch it. -->
+    <CustomAction Id="LaunchMonitorSync" Directory="INSTALLFOLDER"
+                  ExeCommand="&quot;[INSTALLFOLDER]MonitorSync.exe&quot; --background"
+                  Execute="immediate" Return="asyncNoWait" Impersonate="yes" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchMonitorSync" After="InstallFinalize" Condition="NOT Installed AND NOT REMOVE" />
+    </InstallExecuteSequence>
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="UserProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="MonitorSync">

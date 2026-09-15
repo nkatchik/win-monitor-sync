@@ -189,12 +189,21 @@ On multiple displays, verify that brightness targets only the screen under the c
 
 ## Windows installer and distribution
 
+### Automatic tray launch, 15 September 2026
+
+- Release solution build passed with zero warnings/errors and **77/77 deterministic tests passed**. Built the self-contained x64 payload and unsigned MSI with WiX 6.0.2, including normal ICE validation. Inspected the compiled MSI: the asynchronous launch action follows `InstallFinalize` and is conditional on a new install or upgrade.
+- A silent MSI installation at the default `%LOCALAPPDATA%\Programs\MonitorSync` path automatically launched the real app with `--background`, in the installing user's session. The tray icon was present, no app window appeared, the Start-menu shortcut existed, and startup was enabled without further user action.
+- Repair left the app closed and preserved an explicit startup opt-out. A higher-version MSI fixture using the same payload launched the app after upgrade, preserved control preferences and the startup opt-out, and left one product registration. Uninstall left the app closed and removed the executable, shortcut, and startup entry.
+- Both controls were temporarily disabled during this installer-only check to avoid hardware writes. The test installation was removed and the development app and original preferences were restored. Logs are under ignored `artifacts/installer-smoke`. These checks use the default installation path; overriding `INSTALLFOLDER` is not supported through the installer UI and was not preserved automatically for uninstall in an exploratory check.
+
+### Remaining acceptance checks
+
 1. Run `scripts/build.ps1` on Windows; require WiX validation to pass without suppressing ICE checks.
-2. Install as a standard user on a clean Windows 11 machine with no separate .NET runtime. Verify the Start-menu entry, app/worker launch, and optional startup behavior.
+2. Install as a standard user on a clean Windows 11 machine with no separate .NET runtime. Verify automatic tray-only launch after installation, default-on startup, and the Start-menu entry without any post-install setup.
 3. Install a higher-version MSI while the app is closed, then repeat while it is open. Verify Restart Manager/files-in-use behavior, a single installed-product entry, settings retention, and startup preference retention.
 4. Test repair, canceled installation, rollback, downgrade rejection, and ordinary uninstall. Verify installed files, shortcut, and startup entry are removed; user settings/logs remain.
 5. Verify startup is enabled by default, sign out/in, and check for exactly one tray instance and no app window. Disable startup through the tray and confirm the choice survives relaunch and upgrade. Exiting the app must not prevent Windows sign-out or shutdown.
 6. With a real signing identity, run `-RequireSigned`. Verify all installed EXE/DLL and MSI signatures. Test an actual browser download with normal Windows protections enabled.
 7. Test a Store install separately if a listing is approved. Signing, direct-download reputation, and Store acceptance are distinct outcomes.
 
-None of these installer/distribution checks has been completed in this environment. Do not describe the preview as warning-free or production-ready.
+The local installer checks above passed. Clean-machine and standard-user acceptance, upgrades while the app is running, rollback/cancellation, sign-out/in, signing, and Store distribution remain unverified. Do not describe the preview as warning-free or production-ready.

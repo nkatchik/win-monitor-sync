@@ -24,7 +24,7 @@ On Windows, with PowerShell 7 and the SDK installed:
 ./scripts/build.ps1
 ```
 
-The script builds the solution, runs the sync tests, publishes the app and worker, then builds an unsigned per-user MSI and ZIP under `artifacts/releases`. It installs under `%LOCALAPPDATA%\Programs\MonitorSync`, creates a Start-menu shortcut, and removes the startup entry during uninstall. The settings and diagnostic logs are retained in `%LOCALAPPDATA%\MonitorSync`.
+The script builds the solution, runs the sync tests, publishes the app and worker, then builds an unsigned per-user MSI and an optional portable ZIP under `artifacts/releases`. The MSI is the recommended installation: it installs under `%LOCALAPPDATA%\Programs\MonitorSync`, creates a Start-menu shortcut, and launches the app in the tray after a successful install or upgrade, including silent installation. Startup is enabled by default; existing control and startup preferences are preserved. Repair and uninstall do not launch the app. Uninstall removes the startup entry; settings and diagnostic logs are retained in `%LOCALAPPDATA%\MonitorSync`.
 
 `-Runtime win-arm64` selects an ARM64 package. Only the x64 publication has been verified so far. Use a higher three-part `-Version` for upgrades. Cross-architecture upgrades are not validated.
 
