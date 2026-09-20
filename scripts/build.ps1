@@ -30,6 +30,8 @@ try {
     if ($LASTEXITCODE) { throw 'Build failed.' }
     dotnet tests/MonitorSync.Tests/bin/Release/net10.0/MonitorSync.Tests.dll
     if ($LASTEXITCODE) { throw 'Synchronization tests failed.' }
+    dotnet tests/MonitorSync.Windows.Tests/bin/Release/net10.0-windows/MonitorSync.Windows.Tests.dll
+    if ($LASTEXITCODE) { throw 'Windows controller tests failed.' }
 
     dotnet publish src/MonitorSync.App -c Release -r $Runtime --self-contained true -o $publish `
         -p:Version=$Version -p:DebugType=None --disable-build-servers -p:UseSharedCompilation=false

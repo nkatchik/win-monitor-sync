@@ -21,14 +21,22 @@ public sealed class PhysicalMonitors : IDisposable
         GC.KeepAlive(callback);
         foreach (var handle in logical)
         {
+            void Unresolved(string error, string? id = null, string? name = null) =>
+                result.Add(new(id ?? $"unresolved:{handle.ToInt64():X}", name ?? "Unknown display",
+                    null, null, error, IdentityKnown: false));
             var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
-            if (!GetMonitorInfo(handle, ref info)) continue;
+            if (!GetMonitorInfo(handle, ref info))
+            { Unresolved("Could not identify a connected logical display."); continue; }
             var device = new DisplayDevice { Size = (uint)Marshal.SizeOf<DisplayDevice>() };
-            if (!EnumDisplayDevices(info.Device, 0, ref device, 1) || string.IsNullOrWhiteSpace(device.Id)) continue;
-            if (!GetNumberOfPhysicalMonitorsFromHMONITOR(handle, out var count) || count == 0) continue;
-            if (count > 16) continue;
+            if (!EnumDisplayDevices(info.Device, 0, ref device, 1) || string.IsNullOrWhiteSpace(device.Id))
+            { Unresolved("Could not identify the connected display device."); continue; }
+            if (!GetNumberOfPhysicalMonitorsFromHMONITOR(handle, out var count) || count == 0)
+            { Unresolved("Physical monitor discovery failed or returned no monitors.", device.Id, device.Name); continue; }
+            if (count > 16)
+            { Unresolved("Physical monitor discovery returned too many monitors.", device.Id, device.Name); continue; }
             var physical = new PhysicalMonitor[count];
-            if (!GetPhysicalMonitorsFromHMONITOR(handle, count, physical)) continue;
+            if (!GetPhysicalMonitorsFromHMONITOR(handle, count, physical))
+            { Unresolved("Could not open the physical monitors.", device.Id, device.Name); continue; }
             // A logical display with several physical handles cannot be paired
             // reliably by its first display-device path. Do not guess in clone/MST cases.
             var unique = seen.Add(device.Id);
@@ -37,7 +45,7 @@ public sealed class PhysicalMonitors : IDisposable
                 foreach (var monitor in physical) DestroyPhysicalMonitor(monitor.Handle);
                 if (_handles.Remove(device.Id, out var previous)) DestroyPhysicalMonitor(previous.Handle);
                 result.RemoveAll(item => string.Equals(item.Id, device.Id, StringComparison.OrdinalIgnoreCase));
-                result.Add(new(device.Id, device.Name, null, null, "Ambiguous physical display mapping; use extended displays."));
+                Unresolved("Ambiguous physical display mapping; use extended displays.", device.Id, device.Name);
                 continue;
             }
             _handles.Add(device.Id, physical[0]);

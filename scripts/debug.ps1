@@ -44,6 +44,8 @@ try {
     if ($LASTEXITCODE) { throw 'Debug build failed. Check that the SDK pinned in global.json is installed.' }
     & $dotnet tests/MonitorSync.Tests/bin/Debug/net10.0/MonitorSync.Tests.dll
     if ($LASTEXITCODE) { throw 'Synchronization tests failed.' }
+    & $dotnet tests/MonitorSync.Windows.Tests/bin/Debug/net10.0-windows/MonitorSync.Windows.Tests.dll
+    if ($LASTEXITCODE) { throw 'Windows controller tests failed.' }
 
     $publish = Join-Path $repository 'artifacts/debug/app'
     # Pass app-host properties directly to MSBuild's publication target.

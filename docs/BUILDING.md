@@ -70,7 +70,13 @@ dotnet build MonitorSync.slnx -c Release --no-restore --disable-build-servers -m
 dotnet tests/MonitorSync.Tests/bin/Release/net10.0/MonitorSync.Tests.dll
 ```
 
-Run this on Windows for a read-only JSON report:
+The Windows build/debug scripts also run the controller integration tests. To run them separately after building:
+
+```powershell
+dotnet tests/MonitorSync.Windows.Tests/bin/Release/net10.0-windows/MonitorSync.Windows.Tests.dll
+```
+
+These tests run the real connection/retry loop on a dispatcher with simulated audio and DDC. They create no windows and do not access hardware or preferences. For a read-only hardware report:
 
 ```powershell
 Start-Process ./MonitorSync.exe -ArgumentList '--diagnostics', 'report.json' -Wait
@@ -89,6 +95,7 @@ Build and unit-test results do not establish real monitor support. See [Windows 
 | `MonitorSync.Worker` | Isolated, serialized DDC calls with parent-exit cleanup |
 | `MonitorSync.App` | Tray, automatic connection lifecycle, worker deadlines, startup preference |
 | `MonitorSync.Tests` | Deterministic tests with fake audio and monitor transports |
+| `MonitorSync.Windows.Tests` | Dispatcher-based connection/recovery tests with simulated platform I/O |
 | `MonitorSync.Packaging` | WiX payload authoring for per-user installation |
 
 The worker has a three-second deadline for individual operations and twenty seconds for enumeration. A timeout terminates the helper; the app retries with a fresh connection after one second. Volume keys always use ordinary Windows control, including while DDC is unavailable. Windows audio is never passed through the app. This contains a hung user-mode call, but cannot protect Windows from a fault in an existing graphics driver.

@@ -294,7 +294,7 @@ var tests = new (string Name, Func<Task> Run)[]
 };
 
 var failures = 0;
-var allTests = tests.Concat(HardwareVolumeTests.Cases).ToArray();
+var allTests = tests.Concat(HardwareVolumeTests.Cases).Concat(AuditRegressionTests.Cases).ToArray();
 foreach (var (name, run) in allTests)
 {
     try { await run(); Console.WriteLine($"PASS {name}"); }

@@ -4,5 +4,6 @@
   <Project Path="src/MonitorSync.Worker/MonitorSync.Worker.csproj" />
   <Project Path="src/MonitorSync.App/MonitorSync.App.csproj" />
   <Project Path="tests/MonitorSync.Tests/MonitorSync.Tests.csproj" />
+  <Project Path="tests/MonitorSync.Windows.Tests/MonitorSync.Windows.Tests.csproj" />
   <Project Path="installer/MonitorSync.Packaging/MonitorSync.Packaging.csproj" />
 </Solution>

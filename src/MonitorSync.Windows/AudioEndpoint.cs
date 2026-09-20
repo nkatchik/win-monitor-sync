@@ -7,7 +7,12 @@ public sealed record AudioDeviceInfo(string Id, string Name, int Percent, bool M
     string? MonitorName = null, bool IsDisplayAudio = false);
 public sealed class AudioRouteChangedException(string message) : IOException(message);
 
-public sealed class AudioEndpoint : IAudioVolume, IDisposable
+public interface IAudioConnection : IAudioVolume, IDisposable
+{
+    bool IsCurrentRoute { get; }
+}
+
+public sealed class AudioEndpoint : IAudioConnection
 {
     private readonly IMMDeviceEnumerator _enumerator;
     private readonly IAudioEndpointVolume _volume;

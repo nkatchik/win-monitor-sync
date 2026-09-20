@@ -10,9 +10,13 @@ public static class AutomaticMonitorSelection
         if (!isDisplayAudio || string.IsNullOrWhiteSpace(audioMonitorName)) return null;
         var name = Normalize(audioMonitorName);
         if (name.Length == 0) return null;
+        var inventory = monitors.ToArray();
+        // A display that failed discovery might be another instance of this model.
+        // Its absence of DDC handles must never make another display look unique.
+        if (inventory.Any(m => !m.IdentityKnown || Normalize(m.Name).Length == 0)) return null;
         // Count unreadable matches too: two identical displays must not become
         // an apparently unique match just because one has DDC/CI disabled.
-        var matches = monitors.Where(m => Normalize(m.Name) == name).Take(2).ToArray();
+        var matches = inventory.Where(m => Normalize(m.Name) == name).Take(2).ToArray();
         return matches.Length == 1 && matches[0].Volume.HasValue ? matches[0] : null;
     }
 

@@ -43,7 +43,7 @@ public interface IMonitorVolume
 }
 
 public sealed record MonitorDescriptor(string Id, string Name,
-    VolumeReading? Volume, VolumeReading? Brightness, string? Error);
+    VolumeReading? Volume, VolumeReading? Brightness, string? Error, bool IdentityKnown = true);
 
 public sealed record WorkerRequest(string Operation, string? MonitorId = null, byte Code = 0, uint Value = 0,
     string? AudioEndpointId = null);

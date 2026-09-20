@@ -1,6 +1,6 @@
 # MonitorSync for Windows 11
 
-Design and implementation status, 15 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. **Brightness**, **Volume**, and **Start with Windows** default to on and are remembered independently. The app has no brightness or volume overlay. Clean-machine installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
+Design and implementation status, 20 September 2026. The app runs in the tray with automatic hardware volume control and direct DDC brightness keys. **Brightness**, **Volume**, and **Start with Windows** default to on and are remembered independently. The app has no brightness or volume overlay. Clean-machine installation, sustained hardware reliability, and signing remain outstanding. See [README](README.md) and [validation](docs/TESTING.md).
 
 No custom driver will be developed. Use an ordinary application and the existing Windows monitor/audio APIs. Windows and the selected monitor keep matching volume percentages. Brightness bypasses Windows brightness integration, as requested, and controls the monitor directly.
 
@@ -24,6 +24,8 @@ No custom driver will be developed. Use an ordinary application and the existing
 Recheck the target before applying a queued operation. An audio-route change, a cursor-screen change during a pending brightness adjustment, or a display-topology change invalidates pending work for the old target. Readback from an old target must not overwrite the new target's tray readout. Brightness does not write to any native Windows brightness control.
 
 Volume follows this policy through the current default-endpoint and monitor-matching implementation, subject to the naming limitations documented below. Brightness resolves the cursor's logical display to a device path and requires exactly one physical monitor. Both the application and worker check that target before applying brightness.
+
+Display discovery retains an unresolved entry when logical-display identification or physical-monitor enumeration/opening fails. Any unresolved identity blocks automatic volume pairing: a missing display might be another instance of the selected model. A known, unrelated display with unreadable VCP values does not block pairing. Discovery retries automatically; brightness remains independently targeted through the cursor.
 
 ## Feasibility assessment
 
@@ -53,6 +55,8 @@ The native Windows slider and its endpoint gain are the same control. The select
 
 On discovery, read live values and align to the lower current percentage. If Windows is higher, lower it to the verified monitor reading; if the monitor is higher, write and confirm the Windows percentage through DDC. Equal levels require no write. A Windows change during discovery overrides the initial alignment. This also migrates the previous Windows-at-100% mode without raising the monitor to maximum. Both stages now attenuate audio, so the same number can sound quieter than with Windows at maximum or another computer using only monitor gain. The monitor's gain curve is not calibrated, and no acoustic equivalence is claimed.
 
+After an established connection suffers a DDC failure, recovery on the same output and physical monitor preserves the current Windows request instead of repeating initial lower-level alignment. The audio notification subscription stays alive during retries so a switch away and back invalidates recovery even if the final endpoint ID matches. Output/monitor changes, display-topology changes, suspension, and disabling the feature end that continuity; their next connection uses initial alignment again. A failure before the first successful alignment does not count as an established connection.
+
 Core Audio default-endpoint notifications immediately invalidate tray control on a route change; the controller and worker also check the actual default endpoint before device operations. During DDC failure or suspension, native Windows volume continues working. No headphone endpoint is assigned the monitor's volume.
 
 The volume engine coalesces requests over 20 ms and checks readback after 200 ms, with at most three confirmation reads. New Windows/tray input supersedes delayed writes and readback. Idle polls every five seconds reflect monitor-button changes into Windows and the tray, unless newer input invalidated the snapshot. Cancellation, output changes, and feature-range changes invalidate the current connection.
@@ -78,6 +82,8 @@ Twinkle Tray's project documentation likewise reports no official API for modify
 The target desktop reports `Not supported` for `WmiMonitorBrightness` and `WmiMonitorBrightnessMethods`. Brightness therefore uses direct monitor control with feedback in the tray. A laptop panel's native slider is not forwarded to an external monitor, and no native Quick Settings integration is claimed.
 
 **Screen-brightness up/down media keys** change brightness by 5%; **Ctrl+Alt+Page Up / Page Down** remains a fallback. A key burst reads the current brightness, applies ordered steps with 0–100% clamping, coalesces pending writes for 20 ms, and confirms changes after at least 200 ms. Held keys keep making progress. The tray reports confirmed hardware values after adjustment; failed or unconfirmed operations clear the reading and disable the slider. It does not retry a failed write automatically or restore saved brightness at launch.
+
+On a coarse hardware range, each relative key press advances at least one raw hardware step when five percentage points would otherwise round to the same value. This applies during discovery and while another request is pending, in either direction, with clamping at the limits. Absolute slider requests still use the nearest supported value.
 
 Media-key input uses background Raw Input and Windows' descriptor-based HID parser. It supports Consumer display brightness (`0C:6F/70`), Apple Vendor Keyboard (`FF01:20/21`), and Apple Top Case (`00FF:04/05`). Apple vendor-page interpretation requires vendor ID `05AC`; keyboard illumination, Fn, and ordinary F1/F2 are excluded. [USB definitions](https://www.usb.org/sites/default/files/hut1_21_0.pdf), [Apple usage definitions in the upstream HID library](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage.hpp), [usage pages](https://github.com/pqrs-org/cpp-hid/blob/main/include/pqrs/hid/usage_page.hpp)
 

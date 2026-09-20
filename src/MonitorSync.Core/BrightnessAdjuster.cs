@@ -20,7 +20,7 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
     {
         if (delta is not (-5 or 5)) throw new ArgumentOutOfRangeException(nameof(delta));
         if (!_started) { _initialInput.Add((delta, false)); return; }
-        Queue(Math.Clamp(_desired + delta, 0, 100));
+        Queue(StepFrom(_desired, delta));
     }
 
     public void SetPercent(int percent)
@@ -40,6 +40,17 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
         _expected = null;
     }
 
+    private int StepFrom(int percent, int delta)
+    {
+        var next = Math.Clamp(percent + delta, 0, 100);
+        var raw = _confirmed.RawFor(percent);
+        if (_confirmed.RawFor(next) != raw) return next;
+        // Five percentage points can round to no movement on a coarse range.
+        // Relative keys must advance at least one hardware step, except at a limit.
+        var stepped = (uint)Math.Clamp((long)raw + Math.Sign(delta), 0, _confirmed.Maximum);
+        return new VolumeReading(stepped, _confirmed.Maximum).Percent;
+    }
+
     public async Task StartAsync(CancellationToken token)
     {
         if (_started) throw new InvalidOperationException("Create a new brightness burst to read the current level.");
@@ -50,7 +61,7 @@ public sealed class BrightnessAdjuster(IMonitorVolume monitor, Func<bool> isTarg
         _confirmed = reading;
         _desired = reading.Percent;
         foreach (var (value, absolute) in _initialInput)
-            _desired = absolute ? value : Math.Clamp(_desired + value, 0, 100);
+            _desired = absolute ? value : StepFrom(_desired, value);
         _initialInput.Clear();
         _started = true;
         _dirty = reading.RawFor(_desired) != reading.Current;

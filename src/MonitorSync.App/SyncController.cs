@@ -7,13 +7,16 @@ namespace MonitorSync.App;
 public sealed class SyncController : IDisposable
 {
     public static string BuildVersion => typeof(SyncController).Assembly.GetName().Version?.ToString(3) ?? "unknown";
-    private readonly DdcClient _ddc;
+    private readonly DdcClient? _ddc;
+    private readonly IVolumeEnvironment _environment;
     private readonly bool _ownsDdc;
     private readonly CancellationTokenSource _lifetime = new();
     private CancellationTokenSource? _connection;
     private Task _runTask = Task.CompletedTask;
     private HardwareVolumeController? _engine;
-    private AudioEndpoint? _audio;
+    private IAudioConnection? _audio;
+    private string? _monitorId;
+    private bool _connectionInitialized;
     private bool _started, _suspended, _disposed;
     private string _status = "Finding monitor speakers…", _levels = "";
 
@@ -36,7 +39,7 @@ public sealed class SyncController : IDisposable
         }
         catch (Exception error)
         {
-            SettingsStore.Log(error.ToString());
+            _environment.Log(error.ToString());
             TopologyChanged();
             return false;
         }
@@ -46,7 +49,10 @@ public sealed class SyncController : IDisposable
     {
         _ddc = client ?? new DdcClient();
         _ownsDdc = client is null;
+        _environment = new WindowsVolumeEnvironment(_ddc);
     }
+
+    internal SyncController(IVolumeEnvironment environment) => _environment = environment;
 
     public void Start()
     {
@@ -74,14 +80,17 @@ public sealed class SyncController : IDisposable
                 }
                 else
                 {
-                    var output = AudioEndpoint.DescribeDefault();
+                    var output = _environment.DescribeDefault();
+                    if (_audio is not null && (!_audio.IsCurrentRoute || _audio.Capture().EndpointId != output.Id))
+                        ResetAudio();
                     if (!output.IsDisplayAudio)
                     {
+                        ResetAudio();
                         SetStatus("No monitor speakers selected");
                     }
                     else
                     {
-                        var monitors = await _ddc.ListAsync(token);
+                        var monitors = await _environment.ListAsync(token);
                         token.ThrowIfCancellationRequested();
                         var monitor = AutomaticMonitorSelection.Find(output.MonitorName, output.IsDisplayAudio, monitors);
                         if (monitor is null)
@@ -91,12 +100,14 @@ public sealed class SyncController : IDisposable
                         }
                         else
                         {
-                            using var audio = new AudioEndpoint(output.Id);
+                            if (!string.Equals(_monitorId, monitor.Id, StringComparison.OrdinalIgnoreCase)) ResetAudio();
+                            _audio ??= _environment.OpenAudio(output.Id);
+                            _monitorId = monitor.Id;
                             var clock = Stopwatch.StartNew();
-                            var engine = new HardwareVolumeController(audio, new MonitorVolume(_ddc, monitor.Id, output.Id),
+                            var engine = new HardwareVolumeController(_audio, _environment.OpenMonitor(monitor.Id, output.Id),
                                 () => clock.ElapsedMilliseconds);
-                            await engine.StartAsync(token);
-                            _audio = audio;
+                            await engine.StartAsync(token, preserveWindowsVolume: _connectionInitialized);
+                            _connectionInitialized = true;
                             _engine = engine;
                             while (true)
                             {
@@ -117,23 +128,27 @@ public sealed class SyncController : IDisposable
             }
             catch (AudioRouteChangedException)
             {
+                ResetAudio();
                 SetStatus("Checking playback output…");
             }
             catch (MonitorTargetChangedException)
             {
+                ResetAudio();
                 SetStatus("Checking playback output…");
                 retryDelay = 0;
             }
             catch (Exception error)
             {
                 SetStatus("Monitor unavailable — retrying automatically");
-                SettingsStore.Log(error.ToString());
+                _environment.Log(error.ToString());
                 retryDelay = 1000;
             }
             finally
             {
                 _engine = null;
-                _audio = null;
+                // Keep the audio subscription across DDC failures so an output switch,
+                // even away and back during a retry, invalidates recovery on this route.
+                if (!_connectionInitialized || _audio?.IsCurrentRoute != true) ResetAudio();
                 // Publish loss of availability after clearing the failed connection,
                 // including when brightness polling is disabled.
                 Changed?.Invoke(this, EventArgs.Empty);
@@ -143,10 +158,12 @@ public sealed class SyncController : IDisposable
             catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             _connection = null;
         }
+        ResetAudio();
     }
 
     public void TopologyChanged()
     {
+        _connectionInitialized = false;
         _connection?.Cancel();
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -155,6 +172,14 @@ public sealed class SyncController : IDisposable
     {
         _suspended = suspended;
         TopologyChanged();
+    }
+
+    private void ResetAudio()
+    {
+        _audio?.Dispose();
+        _audio = null;
+        _monitorId = null;
+        _connectionInitialized = false;
     }
 
     private void SetStatus(string status, string levels = "")
@@ -178,7 +203,8 @@ public sealed class SyncController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _lifetime.Cancel();
-        if (_ownsDdc) _ddc.Dispose();
+        ResetAudio();
+        if (_ownsDdc) _ddc?.Dispose();
         _lifetime.Dispose();
     }
 

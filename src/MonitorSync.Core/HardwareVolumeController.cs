@@ -15,7 +15,7 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
     public bool Muted => _lastAudio.Muted;
     public bool IsPending => _dirty || _writing || _expected.HasValue;
 
-    public async Task StartAsync(CancellationToken token)
+    public async Task StartAsync(CancellationToken token, bool preserveWindowsVolume = false)
     {
         if (_started) throw new InvalidOperationException("Create a new controller for each audio route.");
         var before = audio.Capture();
@@ -24,9 +24,10 @@ public sealed class HardwareVolumeController(IAudioVolume audio, IMonitorVolume 
         reading.Validate();
         var current = audio.Capture();
         GuardRoute(before, current);
-        // Adopt the lower live level, unless Windows changed during discovery.
+        // Adopt the lower live level on a new connection, unless Windows changed during discovery.
         // In particular, migrating from pinned Windows gain must not turn the monitor up to 100%.
-        if (current == before && current.Percent > reading.Percent)
+        // Same-route DDC recovery keeps the current Windows request, including an undelivered write.
+        if (!preserveWindowsVolume && current == before && current.Percent > reading.Percent)
         {
             audio.TrySetPercent(reading.Percent, current);
             current = audio.Capture();

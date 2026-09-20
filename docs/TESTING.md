@@ -187,6 +187,14 @@ On multiple displays, verify that brightness targets only the screen under the c
 - Debug solution build passed with zero warnings/errors; **77/77 deterministic tests passed**. An isolated check of the built and published assemblies confirmed that both the brightness overlay type and its compiled XAML resource are absent, while the tray menu resource remains present. This check created no app instance and issued no hardware calls.
 - Published managed binaries matched the build. Launched the updated tray app with its current saved preferences preserved: brightness off, volume on, startup off. Physical brightness-key operation was not retested in this revision.
 
+### Audit regression fixes, 20 September 2026
+
+- Release solution build passed with zero warnings/errors; **85/85 core tests and 10/10 Windows controller tests passed**. The committed Windows tests execute the production connection/retry loop on its dispatcher using simulated platform I/O. Build/debug scripts and Windows CI now run them alongside the core tests. They create no windows or worker processes and do not change hardware, preferences, or application logs.
+- Incomplete display discovery retains unresolved identities and prevents automatic volume matching until discovery is complete. Tests cover ambiguous/blank identities, a known unrelated unsupported display, worker-protocol serialization, and the controller remaining unavailable without writes until identity resolution. Actual native enumeration failure with two physical monitors still needs hardware acceptance.
+- Same-output DDC recovery preserves Windows volume after a write fails before delivery, after a confirmation read fails, and through repeated write/discovery failures. Tests include newer input during retry, mute preservation, output invalidation away and back, a replacement physical monitor, suspend/resume, failed initial alignment, and closing during retry with audio subscriptions released.
+- Separate brightness keys advance on coarse ranges. Tests exercise both directions across every value of ranges 0..1 through 0..20, input before/after initial discovery, limits, mixed slider/key order, and superseding a delayed write. The original cursor, cancellation, confirmation, and normal-range cases remain passing. Coarse-range behavior is simulated; no new physical compatibility claim is made.
+- Debug build also passed with zero warnings/errors. Published app/core/Windows/worker assemblies matched the build. A read-only probe of the Dell over HDMI resolved its identity and read both volume and brightness. Restarted the existing development tray app with its brightness, volume, and startup preferences preserved. No failures or coarse ranges were simulated on real hardware.
+
 ## Windows installer and distribution
 
 ### Automatic tray launch, 15 September 2026
