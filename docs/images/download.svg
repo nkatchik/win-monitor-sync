@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="80" viewBox="0 0 320 80" role="img" aria-labelledby="title desc">
+  <title id="title">Download MonitorSync</title>
+  <desc id="desc">Latest MSI installer for Windows 11, 64-bit</desc>
+  <defs>
+    <linearGradient id="background" x2="0" y2="1">
+      <stop stop-color="#426E9B"/>
+      <stop offset="1" stop-color="#31577D"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="3" width="318" height="76" rx="14" fill="#172B40" fill-opacity=".18"/>
+  <rect x="1" y="1" width="318" height="76" rx="14" fill="url(#background)" stroke="#FFFFFF" stroke-opacity=".18"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M42 23v23m-9-9 9 9 9-9"/>
+    <path d="M29 48v7h26v-7"/>
+  </g>
+  <g fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif">
+    <text x="76" y="36" font-size="23" font-weight="600">Download</text>
+    <text x="76" y="57" font-size="13">Windows 11 &#183; 64-bit &#183; MSI installer</text>
+  </g>
+</svg>

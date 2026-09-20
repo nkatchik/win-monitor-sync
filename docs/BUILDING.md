@@ -66,6 +66,8 @@ Add `-f commit=<full-commit-hash>` to select a specific revision.
 
 The supplied workflows produce **unsigned** packages. They require no signing secrets. The manual workflow verifies checksums and attaches all packages to a draft before publishing it. If publication fails after creating the draft, review that draft before retrying the same version. Only the publication job receives permission to create releases.
 
+Each release also includes `MonitorSync-win-x64.msi` and its checksum, identical to the versioned MSI. The README button uses this stable filename through GitHub's `/releases/latest/download/` URL, so it downloads the latest installer directly.
+
 The version input is applied to the MSI, filenames, application assemblies, and diagnostics. Build and release workflows do not establish live monitor compatibility or installation behavior on a real PC.
 
 ## Tests and diagnostics

@@ -87,6 +87,11 @@ jobs:
           assets=("release/$name.msi" "release/$name.msi.sha256" "release/$name.zip" "release/$name.zip.sha256")
           for asset in "${assets[@]}"; do test -s "$asset"; done
           (cd release && sha256sum --check "$name.msi.sha256" "$name.zip.sha256")
+          # Keep the README's /releases/latest/download/ link valid across versions.
+          installer="MonitorSync-win-x64.msi"
+          cp "release/$name.msi" "release/$installer"
+          (cd release && sha256sum "$installer" > "$installer.sha256")
+          assets+=("release/$installer" "release/$installer.sha256")
           cat > release-notes.md <<'NOTES'
           Windows 11 x64 packages: MSI installer and portable ZIP, with SHA-256 checksums.
 
