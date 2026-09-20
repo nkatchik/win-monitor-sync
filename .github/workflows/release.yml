@@ -6,6 +6,10 @@ on:
         description: 'Release version, e.g. 0.1.0 (without v)'
         required: true
         type: string
+      commit:
+        description: 'Full commit hash (optional; blank uses latest commit on selected branch)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -22,9 +26,13 @@ jobs:
     name: Build and test release packages
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      commit: ${{ steps.checkout.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
+          ref: ${{ inputs.commit || github.sha }}
           persist-credentials: false
       - name: Validate version and reject existing tags
         shell: pwsh
@@ -71,8 +79,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
         run: |
           set -euo pipefail
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]
           name="MonitorSync-${RELEASE_VERSION}-win-x64-unsigned"
           assets=("release/$name.msi" "release/$name.msi.sha256" "release/$name.zip" "release/$name.zip.sha256")
           for asset in "${assets[@]}"; do test -s "$asset"; done
@@ -83,7 +93,7 @@ jobs:
           These packages are unsigned. Native Windows volume synchronization is implemented; native Windows brightness integration remains unfinished. Monitor compatibility still requires hardware testing.
           NOTES
           tag="v${RELEASE_VERSION}"
-          gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" \
+          gh release create "$tag" "${assets[@]}" --target "$RELEASE_COMMIT" \
             --title "MonitorSync $RELEASE_VERSION" --notes-file release-notes.md --generate-notes --draft
           gh release edit "$tag" --draft=false
           printf 'Published [MonitorSync %s](https://github.com/%s/releases/tag/%s)\n' \

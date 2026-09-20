@@ -50,11 +50,15 @@ The project is hosted at [nkatchik/win-monitor-sync](https://github.com/nkatchik
 
 To publish, open **Actions → Publish release → Run workflow**, select `main` (or the branch to release), and enter a version such as `0.1.0`. The version must be three integers without a `v` prefix or prerelease suffix. MSI limits the first two numbers to 255 and the third to 65535. Existing tags are rejected; published packages are not overwritten.
 
+Leave **commit** blank to build the latest commit on the selected branch when the workflow is dispatched. To release a specific revision, supply its full commit hash. The release tag always points to the commit actually checked out and built.
+
 The equivalent command is:
 
 ```sh
 gh workflow run release.yml --repo nkatchik/win-monitor-sync --ref main -f version=0.1.0
 ```
+
+Add `-f commit=<full-commit-hash>` to select a specific revision.
 
 The supplied workflows produce **unsigned** packages. They require no signing secrets. The manual workflow verifies checksums and attaches all packages to a draft before publishing it. If publication fails after creating the draft, review that draft before retrying the same version. Only the publication job receives permission to create releases.
 
