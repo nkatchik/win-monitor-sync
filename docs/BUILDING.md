@@ -4,7 +4,7 @@ Run these commands from the repository root.
 
 ## Build and package
 
-Use the SDK pinned in `global.json` (.NET 10.0.401). The app bundles its runtime, so end users do not need to install .NET.
+Use the SDK pinned in `global.json` (.NET 10.0.401). The app bundles its runtime, so end users do not need to install .NET. That desktop runtime accounts for almost all of the roughly 180 MB installed size (about 58 MB compressed in the MSI); the application code is under 1 MB. A framework-dependent package would be much smaller but would require a separate [.NET 10 Desktop Runtime installation](https://learn.microsoft.com/en-us/dotnet/core/install/windows). [WPF does not support trimming](https://learn.microsoft.com/en-us/dotnet/core/deploying/trimming/incompatibilities) the runtime down to just the code used by the app.
 
 For local debugging on Windows, use Windows PowerShell 5.1 or PowerShell 7:
 
@@ -18,7 +18,7 @@ The script builds Debug binaries, runs the tests, publishes the app and worker t
 
 The script uses an SDK extracted into `.tools/dotnet` when present, otherwise `dotnet` from PATH. With a local SDK it also embeds its relative location into the development executables, allowing the app and worker to start at login without this shell's environment. Keep the repository and SDK together. SDK setup is separate; the script does not download it or change machine-wide environment settings.
 
-On Windows, with PowerShell 7 and the SDK installed:
+On Windows, with Windows PowerShell 5.1 or PowerShell 7 and the SDK installed:
 
 ```powershell
 ./scripts/build.ps1
@@ -27,6 +27,10 @@ On Windows, with PowerShell 7 and the SDK installed:
 The script builds the solution, runs the sync tests, publishes the app and worker, then builds an unsigned per-user MSI and an optional portable ZIP under `artifacts/releases`. The MSI is the recommended installation: it installs under `%LOCALAPPDATA%\Programs\MonitorSync`, creates a Start-menu shortcut, and launches the app in the tray after a successful install or upgrade, including silent installation. Startup is enabled by default; existing control and startup preferences are preserved. Repair and uninstall do not launch the app. Uninstall removes the startup entry; settings and diagnostic logs are retained in `%LOCALAPPDATA%\MonitorSync`.
 
 `-Runtime win-arm64` selects an ARM64 package. Only the x64 publication has been verified so far. Use a higher three-part `-Version` for upgrades. Cross-architecture upgrades are not validated.
+
+The app supplies the shared desktop runtime; only the worker's executable, assembly, and manifests are copied from its separate publication. Copying the worker's whole output would replace WPF's `WindowsBase.dll` with an incompatible console-runtime facade.
+
+Before packaging, `scripts/check-publish.ps1` checks the bundled runtime and launches the published app with `--smoke-test`. This loads the real WPF menu and icon resources and exchanges a no-op message with the worker, without opening the menu, changing preferences, or accessing devices. Both Windows workflows run this check through the build script. An ARM64 cross-build checks assembly identity but requires an ARM64 machine for the startup check.
 
 To require a signed release, supply a code-signing certificate available to SignTool in the current user's certificate store and install the Windows SDK:
 

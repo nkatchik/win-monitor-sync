@@ -24,6 +24,12 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args is ["--smoke-test"])
+        {
+            try { await CheckPackageAsync(); Shutdown(0); }
+            catch (Exception error) { SettingsStore.Log(error.ToString()); Shutdown(1); }
+            return;
+        }
         DispatcherUnhandledException += (_, args) =>
         {
             SettingsStore.Log(args.Exception.ToString());
@@ -105,6 +111,22 @@ public partial class App : System.Windows.Application
         }
         finally { _updatingPreferences = false; }
         await ApplyMonitoringAsync();
+    }
+
+    private static async Task CheckPackageAsync()
+    {
+        // Exercise the published desktop runtime, XAML, icon decoding, and worker
+        // without the singleton, saved preferences, hooks, or any hardware I/O.
+        foreach (var assembly in new[] { typeof(object).Assembly, typeof(Application).Assembly, typeof(DependencyObject).Assembly })
+            if (!string.Equals(Path.GetDirectoryName(assembly.Location), Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The package must load its bundled runtime: " + assembly.FullName);
+        using var flyout = new TrayFlyout();
+        flyout.Measure(new Size(320, 600));
+        using var tray = new Forms.NotifyIcon { Text = "MonitorSync" };
+        using var icon = new TrayIcon(tray);
+        icon.Refresh();
+        using var client = new DdcClient();
+        await client.PingAsync();
     }
 
     private static bool ReadActive(Func<bool> read)

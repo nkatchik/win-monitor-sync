@@ -11,6 +11,8 @@ public sealed class DdcClient : IDisposable
     private Process? _process;
     private bool _initialized;
 
+    internal async Task PingAsync() => _ = await RequestAsync(new("ping"), CancellationToken.None);
+
     public async Task<MonitorDescriptor[]> ListAsync(CancellationToken token = default) =>
         (await RequestAsync(new("list"), token)).Monitors ?? [];
 

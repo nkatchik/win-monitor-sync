@@ -204,6 +204,14 @@ On multiple displays, verify that brightness targets only the screen under the c
 - Repair left the app closed and preserved an explicit startup opt-out. A higher-version MSI fixture using the same payload launched the app after upgrade, preserved control preferences and the startup opt-out, and left one product registration. Uninstall left the app closed and removed the executable, shortcut, and startup entry.
 - Both controls were temporarily disabled during this installer-only check to avoid hardware writes. The test installation was removed and the development app and original preferences were restored. Logs are under ignored `artifacts/installer-smoke`. These checks use the default installation path; overriding `INSTALLFOLDER` is not supported through the installer UI and was not preserved automatically for uninstall in an exploratory check.
 
+### Published runtime and MSI startup, 20 September 2026
+
+- The downloaded 0.2.1 MSI installed successfully but the app crashed before managed startup. Windows recorded a missing `WindowsBase, Version=10.0.0.0` assembly. The installed DLL was the console runtime's version-4 facade: merging the worker's entire self-contained output had overwritten WPF's implementation.
+- Packaging now copies only the worker's executable, assembly, and two manifests into the app's publication. The build checks the WindowsBase assembly identity and runs the published app's hardware-free startup check, which loads the bundled WPF runtime, menu/icon resources, and real worker IPC. A fixture containing the worker's facade was rejected by the check. Both CI workflows invoke it through the build script.
+- Release build passed with zero warnings/errors; **85/85 core tests and 10/10 Windows controller tests passed**. The complete packaging script ran under Windows PowerShell 5.1. WiX validation passed; the corrected local 0.2.2 MSI is 58,209,236 bytes, its payload is 179,970,653 bytes, and MonitorSync's own files total 627,538 bytes.
+- Removed the broken local package and performed a fresh silent installation of the corrected MSI at the default path. MSI exited successfully and automatically launched the installed app without a main window. Explorer registered the installed executable's MonitorSync tray icon, and the app and worker remained running. Installed app, worker, and WindowsBase hashes matched the publication; brightness, volume, and startup preferences were preserved. The installed app was left running. Logs are under ignored `artifacts/package-install-check`.
+- No upgrade migration was added. This verification covers a fresh installation; the remaining acceptance items below still apply.
+
 ### Remaining acceptance checks
 
 1. Run `scripts/build.ps1` on Windows; require WiX validation to pass without suppressing ICE checks.

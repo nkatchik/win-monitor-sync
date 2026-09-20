@@ -19,6 +19,7 @@ while (Console.ReadLine() is { } line)
             ?? throw new IOException("Empty request.");
         response = request.Operation switch
         {
+            "ping" => new(true), // Package check: no monitor discovery or device access.
             "list" => new(true, Monitors: monitors.Enumerate()),
             "read" => new(true, Reading: monitors.Read(request.MonitorId ?? "", request.Code)),
             "write" => Write(request),

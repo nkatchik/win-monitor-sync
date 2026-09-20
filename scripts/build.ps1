@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 & "$PSScriptRoot/check-version.ps1" -Version $Version | Out-Null
-if (-not $IsWindows) { throw 'MSI packaging and Authenticode verification must run on Windows.' }
+if ($env:OS -ne 'Windows_NT') { throw 'MSI packaging and Authenticode verification must run on Windows.' }
 if ($RequireSigned -and -not $CertificateThumbprint) { throw 'A signing certificate is required for a trusted release.' }
 $repository = Split-Path $PSScriptRoot -Parent
 Push-Location $repository
@@ -39,11 +39,16 @@ try {
     dotnet publish src/MonitorSync.Worker -c Release -r $Runtime --self-contained true -o $worker `
         -p:Version=$Version -p:DebugType=None --disable-build-servers -p:UseSharedCompilation=false
     if ($LASTEXITCODE) { throw 'Worker publish failed.' }
-    # Share the same pinned runtime in the installed directory.
-    Copy-Item (Join-Path $worker '*') $publish -Recurse -Force
+    # The app supplies the shared runtime and project dependencies. Copy only
+    # the worker's entry point and manifests: its console runtime includes a
+    # WindowsBase.dll stub that would overwrite WPF's implementation.
+    foreach ($file in @('MonitorSync.Worker.exe', 'MonitorSync.Worker.dll', 'MonitorSync.Worker.deps.json', 'MonitorSync.Worker.runtimeconfig.json')) {
+        Copy-Item -LiteralPath (Join-Path $worker $file) -Destination $publish -Force
+    }
     foreach ($file in @('MonitorSync.exe', 'MonitorSync.Worker.exe', 'MonitorSync.runtimeconfig.json', 'MonitorSync.Worker.runtimeconfig.json')) {
         if (-not (Test-Path (Join-Path $publish $file))) { throw "Missing payload file: $file" }
     }
+    & "$PSScriptRoot/check-publish.ps1" -Path $publish -Runtime $Runtime
 
     $signTool = $null
     if ($CertificateThumbprint) {
